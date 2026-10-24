@@ -10,11 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python requirements
-RUN pip install --no-cache-dir \
-    flask \
-    google-genai \
-    pillow \
-    requests
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project files
 COPY . /app

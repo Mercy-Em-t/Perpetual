@@ -12,7 +12,7 @@ COPY whatsapp_gateway/package.json ./package.json
 RUN npm install --production
 
 # Copy application source
-COPY whatsapp_gateway/whatsapp_service.mjs ./whatsapp_service.mjs
+COPY whatsapp_gateway/ ./
 
 EXPOSE 5174
 
