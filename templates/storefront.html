@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Perpetual Storefronts — Creative Gales & Haberdashery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/room.css">
+  <style>
+    :root {
+      --bg: #0f141c;
+      --surface: #161e2b;
+      --surface-raised: #1c2636;
+      --border: #29384d;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent-cyan: #00f0ff;
+      --accent-green: #10b981;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+    }
+    .store-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+    .brand-tabs {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      background: var(--surface);
+      padding: 0.5rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 0.85rem 1.25rem;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
+    .tab-btn.active {
+      background: var(--surface-raised);
+      color: var(--accent-cyan);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      border: 1px solid var(--border);
+    }
+    .catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+    }
+    .product-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .product-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--accent-cyan);
+    }
+    .prod-emoji {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      text-align: center;
+      background: var(--surface-raised);
+      padding: 1rem;
+      border-radius: var(--radius-sm);
+    }
+    .prod-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 0.35rem;
+    }
+    .prod-desc {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      line-height: 1.4;
+      flex-grow: 1;
+    }
+    .prod-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+    }
+    .prod-price {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--accent-green);
+      font-family: var(--font-mono);
+    }
+    .btn-add {
+      background: var(--accent-cyan);
+      color: #0d1117;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn-add:hover {
+      opacity: 0.9;
+    }
+    .checkout-drawer {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      margin-top: 2rem;
+    }
+    .cart-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .order-status-banner {
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid var(--accent-green);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin-top: 1.5rem;
+      display: none;
+    }
+    .station-stepper {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 1rem;
+      position: relative;
+    }
+    .step-node {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .step-node.active {
+      color: var(--accent-cyan);
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🛍️</div>
+      <div>
+        <h1>PERPETUAL STOREFRONT GATEWAY <span style="font-size:0.75rem;font-weight:400;color:var(--accent-cyan);margin-left:0.5rem;">[LIVE DISPATCH]</span></h1>
+        <span class="tagline">Connected to Shared Agent Room &bull; WhatsApp Community Bridge</span>
+      </div>
+    </div>
+
+    <div class="header-status">
+      <a href="/room" style="color:var(--accent-cyan);text-decoration:none;font-size:0.85rem;font-weight:600;background:var(--surface);padding:0.4rem 0.8rem;border-radius:var(--radius-sm);border:1px solid var(--border);">
+        ⚡ View Agent Room Dashboard
+      </a>
+      <div class="pulse-badge">
+        <span class="pulse-dot"></span>
+        <span>CONNECTED</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="store-container">
+    <!-- Brand Selector -->
+    <div class="brand-tabs">
+      <button class="tab-btn active" onclick="switchBrand('gales')">
+        <span>🎨</span> Creative Gales (Decor & Spatial)
+      </button>
+      <button class="tab-btn" onclick="switchBrand('haberdashery')">
+        <span>🧵</span> Digital Nairobi Haberdashery
+      </button>
+      <button class="tab-btn" onclick="switchBrand('kitchen')">
+        <span>🍳</span> Leah's Kitchen (Rotating Pre-Orders)
+      </button>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+      <h2 id="store-title" style="font-size:1.4rem;font-weight:700;">Creative Gales — Spatial Art & Bespoke Decor</h2>
+      <span id="cart-counter" style="background:var(--accent-cyan);color:#0d1117;font-weight:700;padding:0.25rem 0.75rem;border-radius:999px;font-size:0.8rem;">
+        0 Items in Cart
+      </span>
+    </div>
+
+    <!-- Product Grid -->
+    <div class="catalog-grid" id="catalog-container"></div>
+
+    <!-- Checkout Drawer -->
+    <div class="checkout-drawer">
+      <h3 style="font-size:1.15rem;margin-bottom:1rem;color:var(--accent-cyan);">🛒 Order Dispatch & Checkout</h3>
+      
+      <div id="cart-list" style="margin-bottom:1rem;color:var(--text-muted);font-size:0.9rem;">
+        Your cart is empty. Add items above to test the order pipeline!
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">
+        <div>
+          <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">CUSTOMER NAME</label>
+          <input type="text" id="cust-name" value="Dr. Amani Mwangi" style="width:100%;padding:0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-main);">
+        </div>
+        <div>
+          <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">WHATSAPP PHONE NUMBER</label>
+          <input type="text" id="cust-phone" value="+254710720949" style="width:100%;padding:0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-main);">
+        </div>
+        <div>
+          <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">PICKUP POINT / DESTINATION</label>
+          <select id="pickup-point" style="width:100%;padding:0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-main);">
+            <option value="Gate A (Security Desk)">Gate A (Security Desk)</option>
+            <option value="Gate B (Cafeteria Pickup Point)">Gate B (Cafeteria Pickup Point)</option>
+            <option value="Main Kitchen Counter">Main Kitchen Counter</option>
+          </select>
+        </div>
+      </div>
+      <div id="kitchen-cutoff-notice" style="display:none;background:rgba(225,29,72,0.1);border:1px solid #E11D48;border-radius:var(--radius-sm);padding:0.6rem 0.9rem;font-size:0.8rem;color:#FB7185;margin-bottom:1rem;">
+        ⏰ <b>Leah's Kitchen Pre-Order Window:</b> Daily cutoff at <b>17:00 (5:00 PM)</b> with a 15-minute grace window until 17:15. Orders placed now are scheduled for today's kitchen prep batch!
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:1rem;border-top:1px solid var(--border);">
+        <div>
+          <span style="font-size:0.85rem;color:var(--text-muted);">TOTAL AMOUNT:</span>
+          <span id="cart-total" style="font-size:1.4rem;font-weight:700;color:var(--accent-green);margin-left:0.5rem;font-family:var(--font-mono);">$0.00</span>
+        </div>
+        <div style="display:flex;gap:0.75rem;align-items:center;">
+          <button id="btn-quick-fill" type="button" onclick="quickFillCart()" style="background:var(--surface-raised);color:var(--accent-cyan);border:1px solid var(--border);padding:0.75rem 1.25rem;font-weight:600;border-radius:var(--radius-sm);cursor:pointer;font-size:0.9rem;">
+            ⚡ Quick Sample Pack
+          </button>
+          <button id="btn-submit-order" onclick="submitOrderToPerpetual()" style="background:var(--accent-green);color:#0d1117;border:none;padding:0.75rem 1.75rem;font-weight:700;border-radius:var(--radius-sm);cursor:pointer;font-size:1rem;box-shadow:0 4px 14px rgba(16,185,129,0.3);">
+            🚀 Complete Order & Route to WhatsApp
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Order Tracker Banner -->
+      <div id="order-success-banner" class="order-status-banner">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <h4 style="color:var(--accent-green);font-size:1.1rem;margin:0;">✅ Order Dispatched to Perpetual Microservice!</h4>
+          <span id="active-order-id" style="font-family:var(--font-mono);background:var(--surface);padding:0.25rem 0.6rem;border-radius:var(--radius-sm);color:var(--text-main);">--</span>
+        </div>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin:0.5rem 0;">
+          A real-time handoff card was just transmitted into the <b>perpetua</b> WhatsApp Floor Operations channel. Floor workers can now advance it with <code style="color:var(--accent-cyan);">!paid &lt;order_id&gt;</code>.
+        </p>
+        <div class="station-stepper">
+          <div class="step-node active" id="st-pending">🟡 PENDING</div>
+          <div class="step-node" id="st-paid">💳 PAID</div>
+          <div class="step-node" id="st-pack">📦 PACKAGING</div>
+          <div class="step-node" id="st-verify">🔍 VERIFIED</div>
+          <div class="step-node" id="st-dispatch">🚚 DISPATCHED</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CATALOGS = {
+      gales: {
+        title: "Creative Gales — Spatial Art & Bespoke Decor",
+        currency: "USD",
+        items: [
+          { id: "cg_1", name: "Midnight Blue Velvet Sofa", price: 450.00, emoji: "🛋️", desc: "Handcrafted velvet finish tailored for matrix-locked salon setups." },
+          { id: "cg_2", name: "Amber Sconce Photometric Lamp", price: 85.00, emoji: "💡", desc: "Warm downward-throw luminaire calibrated for 0.80 ambient falloff." },
+          { id: "cg_3", name: "Matte Terracotta Ceramic Vase", price: 38.00, emoji: "🏺", desc: "Architectural ceramic vessel designed for floating shelf anchors." },
+          { id: "cg_4", name: "Woven Bohemian Macrame Hanging", price: 48.00, emoji: "🧶", desc: "Hand-knotted cotton fiber tapestry for acoustic dampening." }
+        ]
+      },
+      haberdashery: {
+        title: "Digital Nairobi Haberdashery — Biashara St Hub",
+        currency: "USD",
+        items: [
+          { id: "nh_1", name: "Dutch Wax Hollandais (6 Yards)", price: 48.00, emoji: "🧵", desc: "Authentic premium wax-block printed cotton with metallic gold accents." },
+          { id: "nh_2", name: "Maasai Shúkà Heritage Wrap", price: 22.00, emoji: "🧣", desc: "Heavy acrylic twill in high-contrast red and cobalt blue tartan." },
+          { id: "nh_3", name: "Lamu Silk-Blend Kikoy Fringe", price: 18.00, emoji: "👘", desc: "Coastal handwoven wrap with traditional braided tassel hems." },
+          { id: "nh_4", name: "Solid Brass Tailor's Shears (10-inch)", price: 34.00, emoji: "✂️", desc: "Drop-forged carbon steel with electroplated brass ergonomic bow handles." }
+        ]
+      },
+      kitchen: {
+        title: "Leah's Kitchen — Rotating Pre-Orders & Homemade Curries",
+        currency: "KES",
+        items: [
+          { id: "leah-001", name: "Crispy Veggie Spring Rolls (Pack of 4)", price: 350.00, emoji: "🥟", desc: "Handmade crispy pastry filled with julienned vegetables and aromatic herbs, served with sweet chili dip." },
+          { id: "leah-002", name: "Samosa Trio (Beef, Herb & Cheese)", price: 400.00, emoji: "🔺", desc: "Golden flaky triangular pastries stuffed with spiced minced beef, coriander, and mild cheddar." },
+          { id: "leah-003", name: "Swahili Coconut Chicken Stew with Jeera Rice", price: 850.00, emoji: "🍗", desc: "Slow-simmered tender chicken in rich coastal coconut curry, paired with fragrant basmati cumin rice." },
+          { id: "leah-004", name: "Coastal Slow-Simmered Beef Pilau with Kachumbari", price: 750.00, emoji: "🍛", desc: "Fragrant spiced pilau rice cooked with tender braised beef chunks, cloves, cardamom, and fresh kachumbari." }
+        ]
+      }
+    };
+
+    let activeBrand = "gales";
+    let cart = [];
+
+    function switchBrand(brandKey) {
+      activeBrand = brandKey;
+      cart = [];
+      document.querySelectorAll(".tab-btn").forEach((b, idx) => {
+        b.classList.toggle("active", (brandKey === 'gales' && idx === 0) || (brandKey === 'haberdashery' && idx === 1) || (brandKey === 'kitchen' && idx === 2));
+      });
+      document.getElementById("store-title").textContent = CATALOGS[brandKey].title;
+      document.getElementById("kitchen-cutoff-notice").style.display = brandKey === 'kitchen' ? 'block' : 'none';
+      updateCartUI();
+      renderCatalog();
+    }
+
+    function renderCatalog() {
+      const container = document.getElementById("catalog-container");
+      const data = CATALOGS[activeBrand];
+      const cur = data.currency === "KES" ? "KES " : "$";
+      container.innerHTML = data.items.map(i => `
+        <div class="product-card">
+          <div>
+            <div class="prod-emoji">${i.emoji}</div>
+            <div class="prod-title">${i.name}</div>
+            <div class="prod-desc">${i.desc}</div>
+          </div>
+          <div class="prod-footer">
+            <span class="prod-price">${cur}${i.price.toFixed(2)}</span>
+            <button class="btn-add" onclick="addToCart('${i.id}')">+ Add to Cart</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function addToCart(itemId) {
+      const item = CATALOGS[activeBrand].items.find(i => i.id === itemId);
+      if (!item) return;
+      const existing = cart.find(c => c.id === item.id);
+      if (existing) {
+        existing.qty++;
+      } else {
+        cart.push({ ...item, qty: 1 });
+      }
+      updateCartUI();
+    }
+
+    function updateCartUI() {
+      const data = CATALOGS[activeBrand];
+      const cur = data.currency === "KES" ? "KES " : "$";
+      const totalCount = cart.reduce((acc, c) => acc + c.qty, 0);
+      const totalPrice = cart.reduce((acc, c) => acc + (c.qty * c.price), 0);
+      
+      document.getElementById("cart-counter").textContent = `${totalCount} Items in Cart`;
+      document.getElementById("cart-total").textContent = `${cur}${totalPrice.toFixed(2)}`;
+
+      const listEl = document.getElementById("cart-list");
+      if (cart.length === 0) {
+        listEl.innerHTML = `Your cart is empty. Add items above to test the order pipeline!`;
+        return;
+      }
+
+      listEl.innerHTML = cart.map(c => `
+        <div class="cart-item">
+          <span>${c.emoji} <b>${c.name}</b> (x${c.qty})</span>
+          <span style="font-family:var(--font-mono);font-weight:600;">${cur}${(c.qty * c.price).toFixed(2)}</span>
+        </div>
+      `).join("");
+    }
+
+    async function submitOrderToPerpetual() {
+      if (cart.length === 0) {
+        alert("Cart is empty! Add at least one item first.");
+        return;
+      }
+
+      const custName = document.getElementById("cust-name").value.trim() || "Store Customer";
+      const custPhone = document.getElementById("cust-phone").value.trim() || "+254710720949";
+      const pickupPoint = document.getElementById("pickup-point").value;
+      const total = cart.reduce((acc, c) => acc + (c.qty * c.price), 0);
+      const data = CATALOGS[activeBrand];
+
+      const payload = {
+        customer_name: custName,
+        customer_phone: custPhone,
+        items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.price })),
+        total_amount: total,
+        currency: data.currency,
+        notes: `[${data.title}] Pickup: ${pickupPoint} | Cutoff: Compliant (< 17:00 window)`
+      };
+
+      try {
+        const btn = document.getElementById("btn-submit-order");
+        btn.disabled = true;
+        btn.textContent = "Transmitting to WhatsApp...";
+
+        const resp = await fetch("/api/orders/webhook", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const resData = await resp.json();
+        btn.disabled = false;
+        btn.textContent = "🚀 Complete Order & Route to WhatsApp";
+
+        if (resp.ok && resData.order) {
+          const ord = resData.order;
+          document.getElementById("order-success-banner").style.display = "block";
+          document.getElementById("active-order-id").textContent = ord.order_id;
+          cart = [];
+          updateCartUI();
+
+          // Poll order station to show live floor advancement
+          pollOrderStatus(ord.order_id);
+        } else {
+          alert("Order submission error: " + (resData.error || "Unknown"));
+        }
+      } catch (err) {
+        alert("Network error transmitting order: " + err.message);
+      }
+    }
+
+    function pollOrderStatus(orderId) {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/orders/${orderId}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          const ord = data.order;
+          if (!ord) return;
+
+          const st = ord.station;
+          document.querySelectorAll(".step-node").forEach(n => n.classList.remove("active"));
+          if (st === "PENDING") document.getElementById("st-pending").classList.add("active");
+          if (st === "PAID") document.getElementById("st-paid").classList.add("active");
+          if (st === "PACKAGING") document.getElementById("st-pack").classList.add("active");
+          if (st === "VERIFIED") document.getElementById("st-verify").classList.add("active");
+          if (st === "DISPATCHED") {
+            document.getElementById("st-dispatch").classList.add("active");
+            clearInterval(interval);
+          }
+        } catch { }
+      }, 3000);
+    }
+
+    function quickFillCart() {
+      const items = CATALOGS[activeBrand].items;
+      if (!items || items.length === 0) return;
+      cart = [
+        { ...items[0], qty: 1 },
+        { ...items[1], qty: 2 }
+      ];
+      updateCartUI();
+    }
+
+    // Initialize
+    renderCatalog();
+  </script>
+</body>
+</html>

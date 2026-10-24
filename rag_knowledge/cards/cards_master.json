@@ -1,0 +1,307 @@
+[
+  {
+    "card_id": "RAG-TOPO-001",
+    "category": "Spatial Topology & Object-Oriented Room Hierarchy",
+    "topic": "Class-Based Procedural Room Layout and Decor Hierarchy",
+    "source_file": "Building a Shared Agent Room.pdf",
+    "page_number": 1,
+    "summary": "Defines an object-oriented room topology model where a base Wall class hosts child objects including Shelves, Books, Vases, trailing Plants, Bottles, Candles, and Wall Hangings.",
+    "key_entities": [
+      "Wall",
+      "Shelf",
+      "Book",
+      "Vase",
+      "Flowers",
+      "TrailingPlants",
+      "PerfumeBottle",
+      "Candle",
+      "Tin",
+      "WallHanging"
+    ],
+    "content": "The user outlines a class-based procedural structure to fix and reconstruct room drawings and topology. \nStructure:\n- Base class: 'White Wall' (`left_matte_white_wall`).\n- Child component: Object instantiated from class `Shelf`.\n- Contained items on shelf: Objects from class `Books` (varied styles), `Vase`, `Flowers` and `Plants` (with procedural growth trailing over edges).\n- Secondary accessories: Multi-tiered shelving, varied perfume bottles, candles, and decorative storage tins.\n- Wall decor: Objects from class `WallHanging` positioned at opposing room coordinates.\n- Aesthetics note: Boho interior styling with managed clutter control, allowing algorithmic addition and removal of items without breaking boundary topology.",
+    "grounded_rules": [
+      "Room topology must support hierarchical parent-child object attachment (Wall -> Shelf -> Items).",
+      "Decor density must be algorithmically tunable to avoid visual clutter (the \"exaggerated boho\" issue).",
+      "Object variations must be parameterized (varying book heights, bottle shapes, candle heights)."
+    ],
+    "tags": [
+      "#SpatialTopology",
+      "#ProceduralGeneration",
+      "#OOPInteriorDesign",
+      "#BohoStyling"
+    ]
+  },
+  {
+    "card_id": "RAG-SCN-002",
+    "category": "Programmatic Scene Setup & Spatial Anchoring",
+    "topic": "Precise Surface Coordinate Anchoring and Matrix Locking",
+    "source_file": "Building a Shared Agent Room.pdf",
+    "page_number": 2,
+    "summary": "Implements room_assets Python API to anchor a modern industrial sconce to normalized 2D/3D wall coordinates with transformation matrix pinning (locking=True) to prevent perspective drift.",
+    "key_entities": [
+      "Scene",
+      "Wall",
+      "Sconce",
+      "LightingEngine",
+      "TransformationMatrix",
+      "FloorGrid"
+    ],
+    "content": "To address the problem of lights moving or drifting across renders, the conversation defines a deterministic Python anchoring script using `room_assets`:\n```python\nfrom room_assets import Scene, Wall, Sconce, LightingEngine\n\ndef setup_room_fixtures():\n    scene = Scene.load(\"images/image_13.png\")\n    left_wall = scene.get_surface(id=\"left_matte_white_wall\")\n    grey_sconce = Sconce(\n        style=\"modern_cylindrical_industrial\",\n        housing_color=\"dark_grey\",\n        glass_diffuser=\"ribbed_clear\",\n        light_state=\"on\",\n        light_temperature=\"warm_amber_glow\"\n    )\n    # Normalized coordinates pinned eye-level (1.6m above floor)\n    target_x = 0.22\n    target_y = 0.18\n    target_z = 0.00 # Flush contact\n    \n    grey_sconce.anchor_to(\n        surface=left_wall,\n        coordinates=(target_x, target_y, target_z),\n        locking=True # Pins transformation matrices\n    )\n```\nAnchoring directly onto surface coordinate matrices prevents skewing, drifting, or fixture disappearance during camera movements, re-rendering, or aspect ratio changes.",
+    "grounded_rules": [
+      "Fixtures must anchor to surface-relative normalized coordinates rather than absolute camera viewport space.",
+      "Transformation matrices must be permanently locked (`locking=True`) to maintain camera-perspective invariance.",
+      "Underlying wall texture must be purged of pre-drawn artifacts (hand-painted circles removed in favor of clean matte plaster)."
+    ],
+    "tags": [
+      "#CoordinateAnchoring",
+      "#TransformationMatrices",
+      "#SconceFixture",
+      "#DeterministicSceneSetup"
+    ]
+  },
+  {
+    "card_id": "RAG-LIGHT-003",
+    "category": "Programmatic Scene Setup & Spatial Anchoring",
+    "topic": "Ambient Lighting Engine Registration and Photometric Throw",
+    "source_file": "Building a Shared Agent Room.pdf",
+    "page_number": 3,
+    "summary": "Registers pinned light fixtures into a global lighting engine pass with calibrated strength (0.7), downward/outward falloff throw, and warm amber glow.",
+    "key_entities": [
+      "LightingEngine",
+      "LightPass",
+      "Sconce",
+      "Falloff",
+      "WarmAmberGlow"
+    ],
+    "content": "Lighting integration is decoupled into a global renderer pass:\n```python\nambient_renderer = LightingEngine()\nambient_renderer.register_light_source(\n    source=grey_sconce,\n    strength=0.7,\n    throw=\"downward_and_outward_falloff\"\n)\nscene.save(\"room_updated_locked.png\")\n```\nThis ensures illumination calculations respect surface normals, shadows cast on the blue velvet sofa and floor, and ambient room warmth without relying on unpredictable prompt-based lighting hallucinations.",
+    "grounded_rules": [
+      "Illumination sources must specify explicit photometric parameters: intensity strength, temperature, and directional falloff profile.",
+      "Light rendering must occur post-anchoring to properly compute occlusions against the wall plane."
+    ],
+    "tags": [
+      "#LightingEngine",
+      "#PhotometricFalloff",
+      "#LightPass",
+      "#RenderPipeline"
+    ]
+  },
+  {
+    "card_id": "RAG-CTX-004",
+    "category": "Contextual State & Ambient Audio Sync",
+    "topic": "Temporal Context and Ambient Music State Logging",
+    "source_file": "Building a Shared Agent Room.pdf",
+    "page_number": 3,
+    "summary": "Captures real-world episodic state (11:09 AM timestamp, three persons breakfasting, golden toast and milky tea, Spotify playing Nasty C) as input triggers for generative pipelines.",
+    "key_entities": [
+      "EpisodicState",
+      "Timestamp",
+      "BreakfastScene",
+      "Spotify",
+      "Nasty C",
+      "Toast",
+      "MilkyTea"
+    ],
+    "content": "The user requests dynamic scene generation reflecting exact lived real-time moments:\n- Timestamp: 11:09 AM.\n- Activity: Three people sharing breakfast (golden pan-fried toast, hot milky tea).\n- Audio context: Background Spotify music playing track 'Particular' by Nasty C.\n- Failure Mode Identified: Gemini chat interface fails when attempting direct device manipulation (\"The Spotify app isn't installed on this device. Please install it to continue.\") and image generation quotas (\"limit resets\").\n- Architectural Solution: Decouple physical device playback from prompt contextualization\u2014use programmatic scripts to read media metadata and pass it as text/state embeddings rather than calling locked native system apps.",
+    "grounded_rules": [
+      "Conversational agents must not attempt local OS app execution unless backed by local headless daemon hooks.",
+      "Environmental metadata (time, participants, background audio track) must be bundled into structured payload attributes."
+    ],
+    "tags": [
+      "#ContextualState",
+      "#AmbientAudio",
+      "#SpotifyMetadata",
+      "#EpisodicContext"
+    ]
+  },
+  {
+    "card_id": "RAG-GEN-005",
+    "category": "Multimodal Generative Media Pipeline",
+    "topic": "Python Google GenAI API Script with Multimodal Reference Ingestion",
+    "source_file": "Building a Shared Agent Room.pdf",
+    "page_number": 4,
+    "summary": "Provides standalone Python script leveraging google-genai SDK and imagen-3.0-generate-002 with binary reference image ingestion to generate context-aligned scenes.",
+    "key_entities": [
+      "GoogleGenAISDK",
+      "Client",
+      "Imagen-3.0",
+      "Part",
+      "MultimodalInput"
+    ],
+    "content": "Automated image/video generation implementation using the Google GenAI SDK:\n```python\nimport os\nfrom google import genai\nfrom google.genai import types\n\ndef generate_scene_image(prompt_text, reference_image_path=None):\n    client = genai.Client(api_key=os.environ.get(\"GEMINI_API_KEY\"))\n    contents = [prompt_text]\n    \n    if reference_image_path and os.path.exists(reference_image_path):\n        with open(reference_image_path, \"rb\") as f:\n            image_bytes = f.read()\n        contents.append(\n            types.Part.from_bytes(\n                data=image_bytes,\n                mime_type=\"image/jpeg\"\n            )\n        )\n    response = client.models.generate_content(\n        model=\"imagen-3.0-generate-002\",\n        contents=contents\n    )\n    return response\n```\nTied into an automated event loop: Task state triggers -> Context parser extracts breakfast, time, audio -> Prompt dynamically synthesized -> API executed.",
+    "grounded_rules": [
+      "API calls require secure environment variable injection (`GEMINI_API_KEY`).",
+      "Image references must be passed as binary mime-typed parts to preserve stylistic and topological consistency across generations.",
+      "Script calls must be decoupled from conversational rate limits via asynchronous task queueing."
+    ],
+    "tags": [
+      "#GoogleGenAI",
+      "#Imagen3",
+      "#GenerativePipeline",
+      "#MultimodalPrompting"
+    ]
+  },
+  {
+    "card_id": "RAG-HUB-006",
+    "category": "Multi-Agent Coordination & Pub/Sub Hub",
+    "topic": "Shared Agent Room Local Microservice Architecture",
+    "source_file": "Building a Shared Agent Room.pdf",
+    "page_number": 4,
+    "summary": "Defines local Flask microservice (localhost:5050/room) acting as a pub/sub communication hub for browser workers (DOM parsing) and IDE agents (Antigravity).",
+    "key_entities": [
+      "SharedAgentRoom",
+      "FlaskServer",
+      "PubSubHub",
+      "ChromeWorker",
+      "AntigravityAgent",
+      "JSONTaskPayload"
+    ],
+    "content": "The central coordination node for the multi-agent system:\n- Server: Lightweight Flask web app (`room_server.py`) running on localhost:5050 or local Linux/Ubuntu host.\n- Pub/Sub Endpoint: `/api/messages` and `/api/tasks` handling structured JSON payloads:\n  ```json\n  {\n    \"sender\": \"string\",\n    \"target\": \"string\",\n    \"status\": \"PENDING | CLAIMED | IN_PROGRESS | VERIFIED | DONE\",\n    \"payload\": { ... }\n  }\n  ```\n- Dashboard: Visual `/room` UI rendered in a dedicated browser tab where Chrome workers inspect the DOM or poll websockets, bridging human monitoring and autonomous worker polling.",
+    "grounded_rules": [
+      "All inter-agent tasks must be communicated via standardized JSON envelopes.",
+      "The central room must serve both human-observable visual UI and headless JSON endpoints.",
+      "Local server must run independently of individual agent sessions to persist task state across restarts."
+    ],
+    "tags": [
+      "#SharedAgentRoom",
+      "#FlaskPubSub",
+      "#AgentCoordination",
+      "#LocalMicroservice"
+    ]
+  },
+  {
+    "card_id": "RAG-NOOK-007",
+    "category": "Spatial Interior Architecture & Ergonomics",
+    "topic": "Physical Alcove Layout Optimization and Ergonomic Sightlines",
+    "source_file": "Building a Shared Agent Room.pdf",
+    "page_number": 5,
+    "summary": "Details the physical 2.5-tile by 4-tile alcove floorplan integrating blue velvet sofa, articulating swivel TV bracket for sightline optimization, and boho acoustic textiles.",
+    "key_entities": [
+      "AlcoveNook",
+      "BlueVelvetSofa",
+      "ArticulatingBracket",
+      "SwivelMount",
+      "DaylightWindow",
+      "JuteRunner",
+      "SeagrassOttoman",
+      "Macrame"
+    ],
+    "content": "Spatial planning for the real physical studio / agent nook:\n- Dimensions: 2.5-tile width by 4-tile depth footprint.\n- Layout:\n  1. Blue velvet sofa positioned flush against back wall beneath the sconce and high daylight window.\n  2. TV mounted on an articulating swivel wall bracket on the right wall: solves viewing-distance and narrow-width constraints while keeping the walkway clear.\n  3. Boho tactile and acoustic accessories: woven natural jute runner rug, natural seagrass floor ottoman, layered neutral/earth-tone cushions, and wall-hung woven macrame (providing acoustic dampening for audio recording).",
+    "grounded_rules": [
+      "Clear walkway passage must be preserved by avoiding static floor TV stands in narrow (2.5-tile) rooms.",
+      "Display viewing angle must be adjustable via dual-arm articulating mount.",
+      "Natural materials (jute, seagrass, macrame) provide dual aesthetic boho cohesion and acoustic dampening."
+    ],
+    "tags": [
+      "#SpatialInterior",
+      "#AlcoveErgonomics",
+      "#StudioSetup",
+      "#BohoAcoustics"
+    ]
+  },
+  {
+    "card_id": "RAG-SYNC-008",
+    "category": "Contextual State & Ambient Audio Sync",
+    "topic": "Media State Router and Background Music Telemetry",
+    "source_file": "Building a Shared Agent Room.pdf",
+    "page_number": 5,
+    "summary": "Architects an automated background media sync router that hooks into OS audio or browser Spotify sessions to inject real-time track metadata into task payloads.",
+    "key_entities": [
+      "MediaSyncRouter",
+      "SpotifyTelemetry",
+      "NowPlayingMetadata",
+      "AgentContextHook"
+    ],
+    "content": "Overcomes the limitation where chat models cannot read local Spotify playback:\n- Mechanism: A lightweight background daemon (Python Windows Media Control API or Chrome Media Session listener) extracts active media playback (`artist`, `title`, `album`, `playback_state`).\n- Integration: Directly enriches every task or message published to `/api/messages` with:\n  ```json\n  \"ambient_context\": {\n      \"now_playing\": {\"artist\": \"Nasty C\", \"track\": \"Particular\"},\n      \"timestamp\": \"2026-10-24T11:09:00+03:00\",\n      \"participant_count\": 3\n  }\n  ```\nThis enables downstream visual generators to automatically incorporate current mood, lighting, and narrative tone without manual prompt typing.",
+    "grounded_rules": [
+      "Ambient telemetry must operate passively as a non-blocking background hook.",
+      "Context payloads must degrade gracefully if no media playback is active."
+    ],
+    "tags": [
+      "#MediaSync",
+      "#AudioTelemetry",
+      "#AmbientContext",
+      "#AutomatedMetadata"
+    ]
+  },
+  {
+    "card_id": "RAG-NET-009",
+    "category": "Distributed Infrastructure & Ingress",
+    "topic": "Zero-Trust Cloudflare Tunnel and Remote Agent Ingress",
+    "source_file": "Building a Shared Agent Room.pdf",
+    "page_number": 5,
+    "summary": "Exposes local Flask agent room server securely via cloudflared tunnels, enabling external workers and mobile triggers to interact with localhost without port forwarding.",
+    "key_entities": [
+      "CloudflareTunnel",
+      "ZeroTrust",
+      "cloudflared",
+      "RemoteWorker",
+      "SecureIngress",
+      "HTTPS"
+    ],
+    "content": "Extends localhost:5050 to distributed multi-device environments:\n- Problem: Local Flask server is trapped behind NAT/firewalls, preventing remote cloud agents or mobile notifications from communicating.\n- Solution: Run Cloudflare Tunnel (`cloudflared tunnel run agent-room`) binding `localhost:5050` to a secure custom subdomain (e.g., `https://agent-room.internal.domain`).\n- Security features:\n  - Zero open inbound firewall ports.\n  - TLS encryption end-to-end.\n  - Service token authentication or Cloudflare Access headers required for worker API calls.",
+    "grounded_rules": [
+      "Inbound router port forwarding is strictly prohibited; all ingress must traverse authenticated zero-trust tunnels.",
+      "API calls from external agents must carry bearer token headers verified by the Flask middleware."
+    ],
+    "tags": [
+      "#CloudflareTunnel",
+      "#ZeroTrust",
+      "#SecureIngress",
+      "#RemoteWorkers"
+    ]
+  },
+  {
+    "card_id": "RAG-FSM-010",
+    "category": "Task Orchestration & State Machine",
+    "topic": "Finite State Machine Task Lifecycle and Automatic Crash Rollback",
+    "source_file": "Building a Shared Agent Room.pdf",
+    "page_number": 5,
+    "summary": "Specifies a 5-stage task lifecycle state machine (PENDING, CLAIMED, IN_PROGRESS, VERIFIED, DONE) with heartbeat timeouts to prevent worker lockouts and double-execution.",
+    "key_entities": [
+      "TaskStateMachine",
+      "StateTransitionMatrix",
+      "HeartbeatTimeout",
+      "CrashRecovery",
+      "Checkpointing"
+    ],
+    "content": "Guarantees fault-tolerant task execution across autonomous agents:\n- State Transition Flow:\n  `PENDING` -> `CLAIMED` (worker acquires lease) -> `IN_PROGRESS` (active execution) -> `VERIFIED` (QA/test pass) -> `DONE` (checkpoint saved).\n- Fault Recovery Rules:\n  - If a worker claims a task but fails to send heartbeat updates within 60 seconds, state automatically transitions back to `PENDING` with incremented retry count.\n  - If execution fails twice, task transitions to `DEAD_LETTER` with error stack trace logged.\n  - Prevents race conditions where two subagents process the same scene generation or layout file simultaneously.",
+    "grounded_rules": [
+      "Tasks must be claimed atomically using transactional locks.",
+      "Workers must transmit periodic heartbeats during long generative calls.",
+      "Idempotency keys must accompany every payload to prevent duplicate generation charges."
+    ],
+    "tags": [
+      "#TaskStateMachine",
+      "#FaultTolerance",
+      "#DeadLetterQueue",
+      "#AtomicClaims"
+    ]
+  },
+  {
+    "card_id": "RAG-ANIM-011",
+    "category": "Narrative Animation & Character Pipeline",
+    "topic": "Stylized 3D Animated Series Workflow and Comic Scene Branching",
+    "source_file": "Branch   Branch   Office Scene Setup for Videos.pdf",
+    "page_number": 1,
+    "summary": "Captures character model sheets, slice-of-life office comedy pacing, microwave reheat loops, and narrative branching for a 3D animated video series.",
+    "key_entities": [
+      "CharacterSheet",
+      "Stylized3D",
+      "OfficeComedy",
+      "SwivelChair",
+      "MicrowaveGag",
+      "NarrativeBranching"
+    ],
+    "content": "Companion workflow from the second discussion file:\n- Medium: Stylized 3D animated series / episodic shorts.\n- Narrative Setup: Relatable slice-of-life office humor centered on an expressive female lead character.\n- Comedy Beats:\n  1. Swivel-chair confrontation: Expressive animated reaction as colleagues knock on the glass office door.\n  2. The Cold Coffee Loop: Character walks to the office microwave 3 consecutive times trying to heat cold coffee, interrupted repeatedly by trivial office chaos.\n  3. Branching Escapes: Escalating scenarios including microwave meltdown, coffee spill diplomacy, or accidental viral livestreaming.\n- Asset Integration: Character sheets and turnarounds designed to be programmatically fed into AI video generation models.",
+    "grounded_rules": [
+      "Character consistency across cuts requires standardized turnaround model sheets.",
+      "Comedic timing requires structured episodic beat segmentation (setup, interruption, escalation, punchline)."
+    ],
+    "tags": [
+      "#3DAnimation",
+      "#CharacterSheet",
+      "#OfficeComedy",
+      "#NarrativeBranching"
+    ]
+  }
+]

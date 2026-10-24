@@ -1,0 +1,212 @@
+{
+  "$schema": "./organization_schema.json",
+  "organization": {
+    "org_id": "org_perpetua_001",
+    "name": "Perpetua Artisanal & Decor Hub",
+    "industry": "Home Decor & Smart Spatial Products",
+    "timezone": "Africa/Nairobi",
+    "currency": "USD",
+    "status": "ACTIVE"
+  },
+
+  "departments": {
+    "floor_operations": {
+      "department_id": "dept_ops",
+      "name": "Floor Operations & Fulfillment",
+      "whatsapp_group": {
+        "name": "perpetua",
+        "description": "Floor Operations: Order fulfillment, cashiers, packaging, and spatial decor rendering."
+      },
+      "information_granularity": "RAW_TELEMETRY",
+      "subscribed_events": [
+        "TASK_CREATED",
+        "TASK_STATE_CHANGED",
+        "ORDER_CREATED",
+        "ORDER_STATION_CHANGED",
+        "DRIVE_IMAGE_INGEST",
+        "DRIVE_IMAGE_RECEIVED",
+        "ASSET_INSTANTIATED"
+      ],
+      "allowed_commands": [
+        "!paid",
+        "!pack",
+        "!verify",
+        "!dispatch",
+        "!orders",
+        "!add",
+        "!remove",
+        "!turn",
+        "!light",
+        "!help",
+        "!status"
+      ]
+    },
+
+    "executive_oversight": {
+      "department_id": "dept_exec",
+      "name": "Executive Management & Governance",
+      "whatsapp_group": {
+        "name": "Perpetua - Admin Oversight",
+        "description": "Executive Oversight: Real-time P&L, hourly order pulses, and task pipeline governance."
+      },
+      "information_granularity": "AGGREGATED_PULSE",
+      "subscribed_events": [
+        "EXECUTIVE_PULSE",
+        "HOURLY_ROLLUP",
+        "MINIMAL_TASK_DISPATCH",
+        "ADMIN_AUDIT",
+        "TICKET_RESOLVED"
+      ],
+      "allowed_commands": [
+        "!summary",
+        "!pulse",
+        "!pool",
+        "!assign",
+        "!details",
+        "!task",
+        "!order",
+        "!status",
+        "!help"
+      ]
+    },
+
+    "quality_desk": {
+      "department_id": "dept_support",
+      "name": "Customer Care & IT Helpdesk",
+      "whatsapp_group": {
+        "name": "Perpetua - IT Helpdesk",
+        "description": "Technical incident recovery, lease timeout rollbacks, and SLA breach escalations."
+      },
+      "information_granularity": "EXCEPTION_ONLY",
+      "subscribed_events": [
+        "TIMEOUT_ROLLBACK",
+        "TASK_TIMEOUT_ROLLBACK",
+        "LEASE_EXPIRED",
+        "SERVER_ERROR",
+        "TICKET_CREATED",
+        "SLA_BREACH_ALERT"
+      ],
+      "allowed_commands": [
+        "!ticket",
+        "!resolve",
+        "!health",
+        "!details",
+        "!help"
+      ]
+    }
+  },
+
+  "roles": {
+    "EXECUTIVE": {
+      "title": "Business Owner / Store Manager",
+      "allowed_departments": ["executive_oversight", "floor_operations", "quality_desk"],
+      "allowed_commands": ["*"]
+    },
+    "CASHIER": {
+      "title": "Cashier & Payment Verification Officer",
+      "allowed_departments": ["floor_operations"],
+      "allowed_commands": ["!paid", "!orders", "!status", "!help"]
+    },
+    "PACKAGER": {
+      "title": "Warehouse & Packing Crew",
+      "allowed_departments": ["floor_operations"],
+      "allowed_commands": ["!pack", "!orders", "!status", "!help"]
+    },
+    "QA_INSPECTOR": {
+      "title": "Quality Assurance & Barcode Inspector",
+      "allowed_departments": ["floor_operations", "quality_desk"],
+      "allowed_commands": ["!verify", "!ticket", "!orders", "!status", "!help"]
+    },
+    "COURIER": {
+      "title": "Dispatch Rider / Courier",
+      "allowed_departments": ["floor_operations"],
+      "allowed_commands": ["!dispatch", "!orders", "!help"]
+    },
+    "SPATIAL_ARTIST": {
+      "title": "3D Scene & Decor Stylist",
+      "allowed_departments": ["floor_operations"],
+      "allowed_commands": ["!add", "!remove", "!turn", "!light", "!orders", "!help"]
+    },
+    "SUPPORT_ENGINEER": {
+      "title": "IT & Systems Support Engineer",
+      "allowed_departments": ["quality_desk"],
+      "allowed_commands": ["!ticket", "!resolve", "!health", "!details", "!help"]
+    }
+  },
+
+  "members": [
+    {
+      "member_id": "mbr_owner_01",
+      "name": "Lead Business Owner",
+      "phone": "+254710720949",
+      "role": "EXECUTIVE",
+      "assigned_departments": ["executive_oversight", "floor_operations", "quality_desk"]
+    },
+    {
+      "member_id": "mbr_cashier_01",
+      "name": "Jane Cashier",
+      "phone": "+254700000001",
+      "role": "CASHIER",
+      "assigned_departments": ["floor_operations"]
+    },
+    {
+      "member_id": "mbr_packager_01",
+      "name": "David Warehouse",
+      "phone": "+254700000002",
+      "role": "PACKAGER",
+      "assigned_departments": ["floor_operations"]
+    },
+    {
+      "member_id": "mbr_courier_01",
+      "name": "Dennis Rider",
+      "phone": "+254700000003",
+      "role": "COURIER",
+      "assigned_departments": ["floor_operations"]
+    }
+  ],
+
+  "business_process": {
+    "stations": [
+      {
+        "id": "PENDING",
+        "label": "Order Received / Awaiting Payment",
+        "assigned_role": "CASHIER",
+        "action_required": "Verify receipt via '!paid <order_id> <ref>'",
+        "sla_minutes": 10,
+        "on_sla_breach": "ESCALATE_TO_IT_HELPDESK"
+      },
+      {
+        "id": "PAID",
+        "label": "Payment Confirmed / Ready for Assembly",
+        "assigned_role": "PACKAGER",
+        "action_required": "Box goods via '!pack <order_id>'",
+        "sla_minutes": 20,
+        "on_sla_breach": "ESCALATE_TO_IT_HELPDESK"
+      },
+      {
+        "id": "PACKAGING",
+        "label": "In Boxing / Packing Station",
+        "assigned_role": "QA_INSPECTOR",
+        "action_required": "Scan & verify checklist via '!verify <order_id>'",
+        "sla_minutes": 15,
+        "on_sla_breach": "NOTIFY_EXECUTIVE"
+      },
+      {
+        "id": "VERIFIED",
+        "label": "Quality Checked / Staged for Courier",
+        "assigned_role": "COURIER",
+        "action_required": "Hand off to rider via '!dispatch <order_id> <rider>'",
+        "sla_minutes": 30,
+        "on_sla_breach": "ESCALATE_TO_IT_HELPDESK"
+      },
+      {
+        "id": "DISPATCHED",
+        "label": "In Transit / Order Fulfilled",
+        "assigned_role": "COURIER",
+        "action_required": "None. Increments hourly executive P&L pulse.",
+        "sla_minutes": null,
+        "on_sla_breach": null
+      }
+    ]
+  }
+}

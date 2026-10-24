@@ -1,0 +1,22 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install system utilities
+RUN apk add --no-cache curl
+
+# Copy gateway files
+COPY whatsapp_gateway/package.json ./package.json
+
+# Install dependencies cleanly
+RUN npm install --production
+
+# Copy application source
+COPY whatsapp_gateway/whatsapp_service.mjs ./whatsapp_service.mjs
+
+EXPOSE 5174
+
+ENV WHATSAPP_PORT=5174
+ENV WHATSAPP_AUTH_DIR=/app/.auth_whatsapp_baileys
+
+CMD ["node", "whatsapp_service.mjs"]

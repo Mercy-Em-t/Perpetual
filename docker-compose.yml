@@ -1,0 +1,62 @@
+services:
+  # 1. The Shared Agent Room Microservice (Flask UI + 5-Stage ASADF FSM)
+  room-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.room
+    container_name: perpetual-room-server
+    ports:
+      - "127.0.0.1:5050:5050"
+    volumes:
+      - ./agent_room.db:/app/agent_room.db
+      - ./assets:/app/assets
+      - ./templates:/app/templates
+      - ./static:/app/static
+      - ./docs:/app/docs
+    environment:
+      - PORT=5050
+      - WHATSAPP_GATEWAY_URL=http://whatsapp-gateway:5174
+    restart: unless-stopped
+    networks:
+      - perpetual-net
+
+  # 2. Autonomous WhatsApp Gateway (Baileys + 3-Group Community Command Center)
+  whatsapp-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.whatsapp
+    container_name: perpetual-whatsapp-gateway
+    ports:
+      - "127.0.0.1:5174:5174"
+    volumes:
+      - ./whatsapp_gateway/.auth_whatsapp_baileys:/app/.auth_whatsapp_baileys
+    environment:
+      - WHATSAPP_PORT=5174
+      - WHATSAPP_AUTH_DIR=/app/.auth_whatsapp_baileys
+      - ROOM_SERVER_URL=http://room-server:5050
+    restart: unless-stopped
+    networks:
+      - perpetual-net
+
+  # 3. Dynamic 3D Spatial Asset Worker (Event-driven On-the-fly Instantiation)
+  asset-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.room
+    container_name: perpetual-asset-worker
+    command: ["python", "asset_listener.py", "--loop", "--interval", "2.0"]
+    volumes:
+      - ./agent_room.db:/app/agent_room.db
+      - ./assets:/app/assets
+      - ./room_updated_locked.png:/app/room_updated_locked.png
+    environment:
+      - ROOM_SERVER_URL=http://room-server:5050
+    depends_on:
+      - room-server
+    restart: unless-stopped
+    networks:
+      - perpetual-net
+
+networks:
+  perpetual-net:
+    driver: bridge

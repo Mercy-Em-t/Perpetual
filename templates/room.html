@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shared Agent Room — ASADF Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/room.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+</head>
+<body>
+
+  <!-- Top Navigation / Status Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <div>
+        <h1>SHARED AGENT ROOM <span style="font-size:0.75rem;font-weight:400;color:var(--accent-cyan);margin-left:0.5rem;">[PORT 5050]</span></h1>
+        <span class="tagline">ASADF 5-Stage Task State Machine &bull; Google Drive Reference Pipeline</span>
+      </div>
+    </div>
+
+    <div class="header-status">
+      <!-- Theme Switcher: Studio Dark <-> Droplet Glass -->
+      <div class="theme-switcher-wrap" onclick="toggleTheme()" title="Switch between Studio Dark and Droplet Glass">
+        <span class="theme-label" id="lbl-dark">⚡ Studio Dark</span>
+        <div class="theme-track" id="theme-track">
+          <div class="theme-thumb" id="theme-thumb"></div>
+        </div>
+        <span class="theme-label" id="lbl-droplet">💧 Droplet Glass</span>
+      </div>
+
+      <div class="pulse-badge">
+        <span class="pulse-dot"></span>
+        <span>HUB ONLINE</span>
+      </div>
+      <div style="font-size:0.8rem;color:var(--text-muted);font-family:var(--font-mono);">
+        Agent ID: <span id="current-agent-id" style="color:var(--accent-cyan);">--</span>
+      </div>
+      <div style="font-size:0.8rem;color:var(--text-muted);font-family:var(--font-mono);">
+        Sync: <span id="last-updated-time">--:--:--</span>
+      </div>
+      <div style="font-size:0.8rem;color:var(--text-muted);font-family:var(--font-mono);">
+        Tickets: <span id="open-tickets-count" style="color:#fb7185;font-weight:700;">0</span>
+      </div>
+      <button class="action-btn" onclick="triggerTestIngest()">
+        <span>📥 Ingest Sample Asset</span>
+      </button>
+      <button class="action-btn primary" onclick="openCreateTaskModal()">
+        <span>+ New Task</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Multi-Column DOM Workspace -->
+  <main class="main-layout">
+    
+    <!-- Left Sidebar: Active Agents & Ingested Drive Reference Assets -->
+    <div style="display:flex;flex-direction:column;gap:1.25rem;">
+      
+      <!-- Agents Panel -->
+      <section class="panel" style="max-height: 320px;">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>🤖 Active Agents</span>
+          </div>
+          <span style="font-size:0.75rem;color:var(--text-muted);">60s Lease Rule</span>
+        </div>
+        <div class="panel-body" id="agents-container">
+          <div style="color:var(--text-muted);font-size:0.8rem;text-align:center;">Loading agents...</div>
+        </div>
+      </section>
+
+      <!-- Drive Reference Assets Gallery -->
+      <section class="panel" style="flex:1;">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>🖼️ Drive Reference Assets</span>
+          </div>
+          <span style="font-size:0.72rem;color:var(--text-muted);">/assets/drive_reference/</span>
+        </div>
+        <div class="panel-body">
+          <div class="asset-grid" id="assets-container">
+            <div style="grid-column:span 2;color:var(--text-muted);font-size:0.75rem;text-align:center;">Loading assets...</div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Center Section: ASADF 5-Stage Task Kanban Pipeline -->
+    <section class="panel" style="flex:1;">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>⚡ ASADF Task Pipeline (State Machine)</span>
+        </div>
+        <div style="display:flex;gap:0.75rem;font-size:0.75rem;color:var(--text-muted);">
+          <span>PENDING &rarr; CLAIMED &rarr; IN_PROGRESS &rarr; VERIFIED &rarr; DONE</span>
+        </div>
+      </div>
+
+      <div class="panel-body" style="padding: 0.85rem;">
+        <div class="kanban-board">
+          
+          <!-- Column 1: PENDING -->
+          <div class="kanban-col col-pending">
+            <div class="kanban-col-header">
+              <span>PENDING</span>
+              <span class="task-count" id="count-pending">0</span>
+            </div>
+            <div class="kanban-cards" id="kanban-pending"></div>
+          </div>
+
+          <!-- Column 2: CLAIMED -->
+          <div class="kanban-col col-claimed">
+            <div class="kanban-col-header">
+              <span>CLAIMED</span>
+              <span class="task-count" id="count-claimed">0</span>
+            </div>
+            <div class="kanban-cards" id="kanban-claimed"></div>
+          </div>
+
+          <!-- Column 3: IN_PROGRESS -->
+          <div class="kanban-col col-in-progress">
+            <div class="kanban-col-header">
+              <span>IN_PROGRESS</span>
+              <span class="task-count" id="count-in-progress">0</span>
+            </div>
+            <div class="kanban-cards" id="kanban-in-progress"></div>
+          </div>
+
+          <!-- Column 4: VERIFIED -->
+          <div class="kanban-col col-verified">
+            <div class="kanban-col-header">
+              <span>VERIFIED</span>
+              <span class="task-count" id="count-verified">0</span>
+            </div>
+            <div class="kanban-cards" id="kanban-verified"></div>
+          </div>
+
+          <!-- Column 5: DONE -->
+          <div class="kanban-col col-done">
+            <div class="kanban-col-header">
+              <span>DONE</span>
+              <span class="task-count" id="count-done">0</span>
+            </div>
+            <div class="kanban-cards" id="kanban-done"></div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Sidebar: WhatsApp Community Bridge & IT Desk + Live Pub/Sub Message Stream -->
+    <div class="sidebar-right" style="display:flex;flex-direction:column;gap:1.25rem;">
+      
+      <!-- WhatsApp Community Bridge & IT Desk Panel -->
+      <section class="panel whatsapp-bridge-panel" style="flex:1;display:flex;flex-direction:column;">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>💬 WhatsApp Community Bridge & IT Desk</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span class="ticket-pill-count" id="open-tickets-count">0 Open</span>
+            <button class="action-btn" style="padding:0.25rem 0.55rem;font-size:0.72rem;" onclick="openCreateTicketModal()">
+              + Report Ticket
+            </button>
+          </div>
+        </div>
+        
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:0.85rem;padding:0.85rem;">
+          
+          <!-- 3 WhatsApp Community Groups Status Strip -->
+          <div class="whatsapp-groups-strip">
+            
+            <!-- Group 1: perpetua -->
+            <div class="wa-group-card group-creative" title="Active Creative Hub for Prompt & Scene Dispatches">
+              <div class="wa-group-top">
+                <span class="wa-pulse-dot dot-active"></span>
+                <span class="wa-group-tag">CREATIVE HUB</span>
+              </div>
+              <div class="wa-group-name">🟢 perpetua</div>
+              <div class="wa-group-meta">Live Scene & Audio Events &bull; Active</div>
+            </div>
+
+            <!-- Group 2: Perpetua - IT Helpdesk -->
+            <div class="wa-group-card group-helpdesk" title="Live Error Catching, Leases & Auto-Rollback Alerts">
+              <div class="wa-group-top">
+                <span class="wa-pulse-dot dot-error"></span>
+                <span class="wa-group-tag">IT HELPDESK</span>
+              </div>
+              <div class="wa-group-name">🛠️ Perpetua - IT Helpdesk</div>
+              <div class="wa-group-meta">Live Error Catching & Rollbacks &bull; Active</div>
+            </div>
+
+            <!-- Group 3: Perpetua - Admin Oversight -->
+            <div class="wa-group-card group-admin" title="Executive Audit Logs, Task Pool & Health Telemetry">
+              <div class="wa-group-top">
+                <span class="wa-pulse-dot dot-admin"></span>
+                <span class="wa-group-tag">ADMIN OVERSIGHT</span>
+              </div>
+              <div class="wa-group-name">👑 Perpetua - Admin Oversight</div>
+              <div class="wa-group-meta">Task Pool & Health Telemetry &bull; Synced</div>
+            </div>
+
+          </div>
+
+          <!-- Live Incoming Support Tickets Feed -->
+          <div class="tickets-feed-section" style="flex:1;display:flex;flex-direction:column;">
+            <div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);margin-bottom:0.4rem;display:flex;justify-content:space-between;align-items:center;">
+              <span>INCOMING SUPPORT TICKETS (TICK-xxx)</span>
+              <span style="font-size:0.7rem;font-family:var(--font-mono);">/api/tickets</span>
+            </div>
+            
+            <div class="tickets-container" id="tickets-container">
+              <div style="color:var(--text-muted);font-size:0.75rem;text-align:center;padding:1.5rem;">Loading tickets...</div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Room Pub/Sub Stream -->
+      <section class="panel" style="max-height: 300px;display:flex;flex-direction:column;">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>📡 Room Pub/Sub Stream</span>
+          </div>
+          <span style="font-size:0.75rem;color:var(--text-muted);font-family:var(--font-mono);">/api/messages</span>
+        </div>
+        
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:0.75rem;">
+          
+          <!-- Stream Box -->
+          <div class="message-stream" id="messages-container" style="flex:1;max-height:160px;">
+            <div style="color:var(--text-muted);font-size:0.75rem;text-align:center;">Connecting to stream...</div>
+          </div>
+
+          <!-- Quick Sender Form -->
+          <form id="send-message-form" style="border-top:1px solid var(--border-color);padding-top:0.6rem;display:flex;flex-direction:column;gap:0.5rem;">
+            <div style="display:flex;gap:0.4rem;">
+              <input type="text" id="msg-topic" class="form-input" style="width:40%;font-size:0.75rem;" placeholder="TOPIC (e.g. TASK_SYNC)" value="TASK_SYNC">
+              <input type="text" id="msg-text" class="form-input" style="flex:1;font-size:0.75rem;" placeholder="Type broadcast message..." required>
+            </div>
+            <button type="submit" class="action-btn" style="justify-content:center;background:var(--bg-card);font-size:0.75rem;">
+              Send to Room
+            </button>
+          </form>
+
+        </div>
+      </section>
+
+      <!-- Protocol & Telemetry Info -->
+      <section class="panel" style="background:rgba(22, 30, 43, 0.7);">
+        <div class="panel-body" style="font-size:0.75rem;line-height:1.6;color:var(--text-muted);">
+          <div style="font-weight:700;color:var(--text-main);margin-bottom:0.25rem;">ASADF Protocol Specifications</div>
+          <div>&bull; <strong>Claim Lease:</strong> 60s auto-rollback to PENDING</div>
+          <div>&bull; <strong>WhatsApp Bridge:</strong> Automated triage to 3 community channels</div>
+          <div>&bull; <strong>Drive Ingest:</strong> Base64 webhook &rarr; auto task creation</div>
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- Create Task Modal -->
+  <div class="modal-overlay" id="create-task-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="font-size:1.05rem;">Create New ASADF Task</h3>
+        <button onclick="closeModal('create-task-modal')" style="background:none;border:none;color:var(--text-muted);font-size:1.2rem;cursor:pointer;">&times;</button>
+      </div>
+      <form id="create-task-form">
+        <div class="form-group">
+          <label for="task-title">Task Title</label>
+          <input type="text" id="task-title" class="form-input" placeholder="e.g. Generate Breakfast Scene with Sconce" required>
+        </div>
+        <div class="form-group" style="display:flex;gap:1rem;">
+          <div style="flex:1;">
+            <label for="task-type">Task Type</label>
+            <input type="text" id="task-type" class="form-input" value="SCENE_GENERATION">
+          </div>
+          <div style="width:100px;">
+            <label for="task-priority">Priority</label>
+            <select id="task-priority" class="form-input">
+              <option value="1">1 - Low</option>
+              <option value="2" selected>2 - Normal</option>
+              <option value="3">3 - High</option>
+              <option value="4">4 - Critical</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="task-details">Payload / Instructions (JSON or Text)</label>
+          <textarea id="task-details" class="form-input" style="height:80px;resize:vertical;" placeholder="Details, prompt, parameters..."></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:1.25rem;">
+          <button type="button" class="action-btn" onclick="closeModal('create-task-modal')">Cancel</button>
+          <button type="submit" class="action-btn primary">Dispatch Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create Support Ticket Modal -->
+  <div class="modal-overlay" id="create-ticket-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="font-size:1.05rem;">🛠️ Report WhatsApp Support Ticket</h3>
+        <button onclick="closeModal('create-ticket-modal')" style="background:none;border:none;color:var(--text-muted);font-size:1.2rem;cursor:pointer;">&times;</button>
+      </div>
+      <form id="create-ticket-form">
+        <div class="form-group">
+          <label for="ticket-title-input">Incident Summary</label>
+          <input type="text" id="ticket-title-input" class="form-input" placeholder="e.g. Camera perspective skew on left wall" required>
+        </div>
+        <div class="form-group" style="display:flex;gap:1rem;">
+          <div style="flex:1;">
+            <label for="ticket-sev-input">Severity</label>
+            <select id="ticket-sev-input" class="form-input">
+              <option value="LOW">LOW</option>
+              <option value="MEDIUM" selected>MEDIUM</option>
+              <option value="HIGH">HIGH</option>
+              <option value="CRITICAL">CRITICAL</option>
+            </select>
+          </div>
+          <div style="flex:1;">
+            <label for="ticket-task-input">Associated Task ID (optional)</label>
+            <input type="text" id="ticket-task-input" class="form-input" placeholder="e.g. task_demo_cam">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="ticket-desc-input">Technical Description / Stack Trace</label>
+          <textarea id="ticket-desc-input" class="form-input" style="height:80px;resize:vertical;" placeholder="Details reported to Perpetua - IT Helpdesk..."></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:1.25rem;">
+          <button type="button" class="action-btn" onclick="closeModal('create-ticket-modal')">Cancel</button>
+          <button type="submit" class="action-btn primary" style="background:#25d366;border-color:#128c7e;color:#111;">Dispatch to IT Helpdesk</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/js/room.js"></script>
+</body>
+</html>

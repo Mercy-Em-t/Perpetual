@@ -1,0 +1,17 @@
+{
+  "name": "perpetual-whatsapp-gateway",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Dedicated Autonomous WhatsApp Gateway and Community Command Center for Perpetual Workspace",
+  "main": "whatsapp_service.mjs",
+  "scripts": {
+    "start": "node whatsapp_service.mjs",
+    "check": "node --check whatsapp_service.mjs"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.19",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
