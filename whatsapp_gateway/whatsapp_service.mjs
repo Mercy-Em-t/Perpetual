@@ -77,6 +77,9 @@ async function setupTargetGroups() {
   }
 }
 
+let reconnectCount = 0;
+let reconnectTimer = null;
+
 async function startWhatsAppBot() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
@@ -99,10 +102,16 @@ async function startWhatsAppBot() {
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       console.log(`[WHATSAPP] Connection closed (code: ${statusCode}). Reconnecting: ${shouldReconnect}`);
       if (shouldReconnect) {
-        setTimeout(startWhatsAppBot, 3000);
+        // Exponential backoff up to 30 seconds when encountering code 440 (stream replaced / multi-device clash)
+        reconnectCount++;
+        const delay = statusCode === 440 ? Math.min(30000, 4000 * Math.pow(1.5, Math.min(reconnectCount, 5))) : 5000;
+        console.log(`[WHATSAPP] Scheduling reconnect in ${(delay / 1000).toFixed(1)}s (Attempt #${reconnectCount})...`);
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(startWhatsAppBot, delay);
       }
     } else if (connection === "open") {
       connectionState = "open";
+      reconnectCount = 0;
       botJid = sock.user?.id ? sock.user.id.split(":")[0] + "@s.whatsapp.net" : null;
       console.log(`[WHATSAPP] Connected successfully as: ${botJid}`);
       await setupTargetGroups();
