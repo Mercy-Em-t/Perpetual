@@ -35,7 +35,10 @@ async function safeSendMessage(jid, content) {
 }
 
 // Provision or auto-discover all 3 Community Groups & sync descriptions
+let groupsInitialized = false;
+
 async function setupTargetGroups() {
+  if (groupsInitialized) return;
   try {
     console.log(`[WHATSAPP] Fetching all participating groups...`);
     const allGroups = await sock.groupFetchAllParticipating();
@@ -51,21 +54,13 @@ async function setupTargetGroups() {
         if (matchedComm) {
           communityJid = matchedComm.id;
           console.log(`[WHATSAPP] Found existing Community "${matchedComm.subject}" -> JID: ${communityJid}`);
-        } else if (typeof sock.communityCreate === "function") {
-          console.log(`[WHATSAPP] Creating new Community "Perpetua Community"...`);
-          await sleep(3000);
-          const commRes = await sock.communityCreate("Perpetua Community", "Perpetua Shared Room Community: Floor Operations, Quality Desk, and Executive Oversight.");
-          if (commRes) {
-            communityJid = commRes.id;
-            console.log(`[WHATSAPP] Created Community -> JID: ${communityJid}`);
-          }
         }
       }
     } catch (commErr) {
       console.warn(`[WHATSAPP] Community note:`, commErr.message);
     }
 
-    // 2. Discover or provision the 3 Departmental Groups
+    // 2. Discover the 3 Departmental Groups
     for (const [key, groupConfig] of Object.entries(GROUPS)) {
       const matched = groupList.find(
         (g) => g.subject && g.subject.trim().toLowerCase() === groupConfig.name.toLowerCase()
@@ -73,43 +68,10 @@ async function setupTargetGroups() {
 
       if (matched) {
         groupConfig.jid = matched.id;
-        console.log(`[WHATSAPP] Found existing group "${matched.subject}" -> JID: ${groupConfig.jid}`);
-      } else {
-        console.log(`[WHATSAPP] Creating group "${groupConfig.name}"...`);
-        try {
-          await sleep(4000);
-          const createRes = await sock.groupCreate(groupConfig.name, [botJid]);
-          groupConfig.jid = createRes.id;
-          console.log(`[WHATSAPP] Created group "${groupConfig.name}" -> JID: ${groupConfig.jid}`);
-          await sleep(1000);
-          await safeSendMessage(groupConfig.jid, { text: groupConfig.welcome });
-        } catch (createErr) {
-          console.warn(`[WHATSAPP] Failed creating "${groupConfig.name}":`, createErr.message);
-        }
-      }
-
-      // Link group into parent community
-      if (communityJid && groupConfig.jid && typeof sock.communityLinkGroup === "function") {
-        try {
-          await sleep(1500);
-          await sock.communityLinkGroup(groupConfig.jid, communityJid);
-          console.log(`[WHATSAPP] Linked group "${groupConfig.name}" into Community "${communityJid}"`);
-        } catch (linkErr) {
-          console.log(`[WHATSAPP] Group link notice for "${groupConfig.name}":`, linkErr.message);
-        }
-      }
-
-      // Sync Group Description with Command Tutorial
-      if (groupConfig.jid && groupConfig.description) {
-        try {
-          await sleep(1000);
-          await sock.groupUpdateDescription(groupConfig.jid, groupConfig.description);
-          console.log(`[WHATSAPP] Updated description for "${groupConfig.name}" with command cheat-sheet.`);
-        } catch (descErr) {
-          console.log(`[WHATSAPP] Note: Description sync for "${groupConfig.name}": ${descErr.message}`);
-        }
+        console.log(`[WHATSAPP] Bound group "${matched.subject}" -> JID: ${groupConfig.jid}`);
       }
     }
+    groupsInitialized = true;
   } catch (err) {
     console.error(`[WHATSAPP] Error during setupTargetGroups:`, err.message);
   }
