@@ -1,10 +1,12 @@
 /**
  * Comprehensive Passive Ambient Intelligence Engine
- * Implements All 4 Core "Read & Act" Superpowers:
- *  1. Automatic M-Pesa SMS Reconciler (Zero-Friction Cashiering with 💳 reaction & confirmation card)
- *  2. Passive Order Notes & Shelf Locations (Packaging tracking with 📦 reaction & zero spam)
- *  3. Automatic Rider / Courier Assignment (Logistics handoffs with 🚚 reaction & zero spam)
- *  4. Product Photo Ingestion (Auto-download, Supabase Storage upload, catalog listing & 📸 reaction)
+ * Hardened with Enterprise-Grade Anti-Nonsense Guardrails:
+ *  1. Intent & Negation Guard (Ignores questions & negated statements like "not taking")
+ *  2. Terminal State Lock (Never tampers with delivered, cancelled, or archived orders)
+ *  3. Unpaid Dispatch Protection (Blocks dispatching orders that are still pending payment)
+ *  4. M-Pesa Single-Use & Anti-Collision (Deduplicates codes & halts on ambiguous amounts)
+ *  5. Role-Based Group Authority (Community chats cannot advance warehouse stations)
+ *  6. Anti-Junk Photo Ingestion (Sanity checks on price, item name, and management authority)
  */
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import { resolveGroupContext, resolveShopOrder } from "./tenant_resolver.mjs";
@@ -16,6 +18,20 @@ const dbHdrs = {
   "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
   "Content-Type": "application/json"
 };
+
+const TERMINAL_STATUSES = ["delivered", "cancelled", "archived", "refunded"];
+const JUNK_WORDS = ["look", "this", "pic", "photo", "image", "haha", "receipt", "waybill", "screenshot", "meme", "damaged", "test", "broken"];
+
+/**
+ * Natural language intent checks
+ */
+export function isNegated(text) {
+  return /\b(?:not|no|don't|dont|never|cancelling|cancelled|refused|delayed|fake|wrong|mistake|stop|hold\s+on)\b/i.test(text);
+}
+
+export function isQuestionOrInquiry(text) {
+  return text.includes("?") || /^\s*(?:is|are|why|where|who|when|which|how)\b/i.test(text);
+}
 
 /**
  * Extracts order reference candidates from natural staff conversation.
@@ -159,7 +175,7 @@ export async function uploadProductImageToStorage(shopId, filename, buffer, mime
 }
 
 /**
- * Main Ambient Intelligence Message Processor
+ * Main Ambient Intelligence Message Processor with Comprehensive Guardrails
  */
 export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, msg, safeReactMessage, safeSendMessage, sock) {
   try {
@@ -169,71 +185,112 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
     const now = new Date();
     const timeStr = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const messageKey = msg.key;
+    const cleanText = (rawText || "").trim().replace(/\s+/g, " ");
+
+    // Guardrail: Ignore single-character noise, pure whitespace, or tiny strings
+    if (cleanText.length < 5 && !msg.message?.imageMessage) return;
 
     // =========================================================================
-    // SUPERPOWER 1: Automatic M-Pesa SMS Reconciler (Zero-Friction Cashiering)
+    // SUPERPOWER 1: Automatic M-Pesa SMS Reconciler (with Safety Guardrails)
     // =========================================================================
     const mpesa = parseMpesaSms(rawText);
     if (mpesa && shop) {
       console.log(`[PASSIVE RECONCILER] Detected M-Pesa SMS in ${shop.name}: Ref ${mpesa.code}, Amount KES ${mpesa.amount}`);
 
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?shop_id=eq.${shop.id}&status=eq.pending&total_price=eq.${mpesa.amount}&order=created_at.desc&limit=5`, { headers: dbHdrs });
-      const candidates = await res.json();
-
-      if (Array.isArray(candidates) && candidates.length > 0) {
-        const orderToSettle = candidates[0];
-        const displayId = formatDisplayOrderId(orderToSettle);
-        const updatedNotes = orderToSettle.notes 
-          ? `${orderToSettle.notes}\n• [${timeStr} @${callerName}]: Auto-settled via M-Pesa SMS (${mpesa.code})`
-          : `• [${timeStr} @${callerName}]: Auto-settled via M-Pesa SMS (${mpesa.code})`;
-
-        await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${orderToSettle.id}`, {
-          method: "PATCH",
-          headers: { ...dbHdrs, "Prefer": "return=minimal" },
-          body: JSON.stringify({
-            status: "paid",
-            internal_status: "PAID",
-            mpesa_code: mpesa.code,
-            notes: updatedNotes
-          })
-        });
-
-        console.log(`[PASSIVE RECONCILER] Settled Order #${orderToSettle.id.slice(0, 8)} for ${shop.name} with M-Pesa ${mpesa.code}`);
-
-        // 1. Emoji reaction on the SMS
-        if (safeReactMessage && messageKey) {
-          await safeReactMessage(remoteJid, messageKey, "💳");
-        }
-
-        // 2. High-confidence confirmation card for cashier peace of mind
+      // Guardrail 1A: Deduplication & Single-Use Invariant Check
+      const dupRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?mpesa_code=eq.${mpesa.code}&status=eq.paid&select=id,client_name`, { headers: dbHdrs });
+      const existingPaid = await dupRes.json();
+      if (Array.isArray(existingPaid) && existingPaid.length > 0) {
+        console.warn(`[GUARDRAIL REJECT] Duplicate M-Pesa Code: ${mpesa.code} already redeemed on Order #${existingPaid[0].id.slice(0, 8)}`);
+        if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "⚠️");
         if (safeSendMessage) {
           await safeSendMessage(remoteJid, {
-            text: `💳 *Payment Auto-Reconciled — ${shop.name}*\n` +
-                  `• Order: *${displayId}* (${orderToSettle.client_name || "Guest Customer"})\n` +
-                  `• Ref: \`${mpesa.code}\` | Amount: *KES ${Number(mpesa.amount).toLocaleString()}*\n` +
-                  `• Status: *PAID & SETTLED* ✅\n` +
-                  `• Next Station: \`!pack ${orderToSettle.id.slice(0, 8)}\``
+            text: `⚠️ *Duplicate M-Pesa Receipt!*\nCode \`${mpesa.code}\` was already redeemed on settled order *#${existingPaid[0].id.slice(0, 8).toUpperCase()}*.`
           });
         }
         return;
       }
+
+      // Query active pending orders matching this exact amount
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?shop_id=eq.${shop.id}&status=eq.pending&total_price=eq.${mpesa.amount}&order=created_at.desc&limit=5`, { headers: dbHdrs });
+      const candidates = await res.json();
+
+      if (!Array.isArray(candidates) || candidates.length === 0) {
+        console.log(`[PASSIVE RECONCILER] No pending order found matching amount KES ${mpesa.amount} in ${shop.name}`);
+        if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "❓");
+        return;
+      }
+
+      // Guardrail 1B: Ambiguity Protection (Never guess if multiple orders match the same amount)
+      if (candidates.length > 1) {
+        console.warn(`[GUARDRAIL REJECT] Ambiguous M-Pesa Match: ${candidates.length} orders found with amount KES ${mpesa.amount}`);
+        if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "❓");
+        if (safeSendMessage) {
+          const listStr = candidates.slice(0, 3).map(o => `• *#${o.id.slice(0, 8).toUpperCase()}* (${o.client_name || "Guest"})`).join("\n");
+          await safeSendMessage(remoteJid, {
+            text: `⚠️ *Ambiguous Payment Notice (KES ${Number(mpesa.amount).toLocaleString()} - Ref: \`${mpesa.code}\`)*\n` +
+                  `Found ${candidates.length} pending orders for this exact amount:\n${listStr}\n\n` +
+                  `👉 *Cashier confirmation required:* Reply with \`!paid <order_id> ${mpesa.code}\` to select the right order.`
+          });
+        }
+        return;
+      }
+
+      // Exact 1:1 Match Found: Safe to auto-settle!
+      const orderToSettle = candidates[0];
+      const displayId = formatDisplayOrderId(orderToSettle);
+      const updatedNotes = orderToSettle.notes 
+        ? `${orderToSettle.notes}\n• [${timeStr} @${callerName}]: Auto-settled via M-Pesa SMS (${mpesa.code})`
+        : `• [${timeStr} @${callerName}]: Auto-settled via M-Pesa SMS (${mpesa.code})`;
+
+      await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${orderToSettle.id}`, {
+        method: "PATCH",
+        headers: { ...dbHdrs, "Prefer": "return=minimal" },
+        body: JSON.stringify({
+          status: "paid",
+          internal_status: "PAID",
+          mpesa_code: mpesa.code,
+          notes: updatedNotes
+        })
+      });
+
+      console.log(`[PASSIVE RECONCILER] Settled Order #${orderToSettle.id.slice(0, 8)} for ${shop.name} with M-Pesa ${mpesa.code}`);
+
+      if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "💳");
+
+      if (safeSendMessage) {
+        await safeSendMessage(remoteJid, {
+          text: `💳 *Payment Auto-Reconciled — ${shop.name}*\n` +
+                `• Order: *${displayId}* (${orderToSettle.client_name || "Guest Customer"})\n` +
+                `• Ref: \`${mpesa.code}\` | Amount: *KES ${Number(mpesa.amount).toLocaleString()}*\n` +
+                `• Status: *PAID & SETTLED* ✅\n` +
+                `• Next Station: \`!pack ${orderToSettle.id.slice(0, 8)}\``
+        });
+      }
+      return;
     }
 
     // =========================================================================
-    // SUPERPOWER 4: Product Photo Ingestion (Passive Photo Processing)
+    // SUPERPOWER 4: Product Photo Ingestion (with Anti-Meme / Anti-Junk Guardrails)
     // =========================================================================
     const hasImage = Boolean(msg.message?.imageMessage);
     if (hasImage && shop) {
-      console.log(`[PASSIVE PHOTO] Inbound product photo detected in ${shop.name} from @${callerName}`);
+      // Guardrail 4A: Role Authority (Only MANAGEMENT groups or store owners can catalog items)
+      // Operations staff share waybills and damaged boxes; those must NOT become store products!
+      const isManagement = context.role === "MANAGEMENT";
+      const isOwner = shop.whatsapp_number && senderId.includes(shop.whatsapp_number);
 
+      if (!isManagement && !isOwner) {
+        console.log(`[GUARDRAIL REJECT] Photo ingestion skipped: sent in ${context.role} group (Management role required).`);
+        return;
+      }
+
+      console.log(`[PASSIVE PHOTO] Inbound product photo detected in ${shop.name} from @${callerName}`);
       const caption = rawText || "";
       const parsed = parseProductCaption(caption);
 
       if (!parsed || parsed.price === null) {
-        // Photo received without price: tap question emoji and prompt
-        if (safeReactMessage && messageKey) {
-          await safeReactMessage(remoteJid, messageKey, "❓");
-        }
+        if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "❓");
         if (safeSendMessage) {
           const itemName = parsed?.name || "New Item";
           await safeSendMessage(remoteJid, {
@@ -242,6 +299,23 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
                   `_Example: "KES 1,800"_`
           });
         }
+        return;
+      }
+
+      // Guardrail 4B: Price Sanity (KES 20 to KES 2,000,000)
+      if (parsed.price < 20 || parsed.price > 2000000) {
+        console.warn(`[GUARDRAIL REJECT] Unrealistic product price: KES ${parsed.price}`);
+        if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "⚠️");
+        if (safeSendMessage) {
+          await safeSendMessage(remoteJid, { text: `⚠️ Price KES ${parsed.price} is outside allowed range (KES 20 - KES 2,000,000).` });
+        }
+        return;
+      }
+
+      // Guardrail 4C: Junk Word & Length Check
+      if (parsed.name.length < 3 || JUNK_WORDS.includes(parsed.name.toLowerCase())) {
+        console.warn(`[GUARDRAIL REJECT] Junk product name detected: "${parsed.name}"`);
+        if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "❓");
         return;
       }
 
@@ -282,12 +356,8 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
           const insertedRows = await insertRes.json();
           const p = insertedRows?.[0];
 
-          // React with camera emoji
-          if (safeReactMessage && messageKey) {
-            await safeReactMessage(remoteJid, messageKey, "📸");
-          }
+          if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "📸");
 
-          // Send confirmation preview card
           if (safeSendMessage && p) {
             await safeSendMessage(remoteJid, {
               text: `📸 *New Product Auto-Listed — ${shop.name}*\n` +
@@ -315,41 +385,73 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
     const orderRefs = extractOrderReferences(rawText);
     if (orderRefs.length === 0) return;
 
+    // Guardrail 2A: Intent Integrity — Reject questions & inquiries
+    if (isQuestionOrInquiry(cleanText)) {
+      console.log(`[GUARDRAIL IGNORE] Message is an inquiry, not an action: "${cleanText}"`);
+      return;
+    }
+
+    // Guardrail 2B: Negation Filter — Block negated statements from moving status
+    const hasNegation = isNegated(cleanText);
+
     for (const ref of orderRefs) {
       const order = await resolveShopOrder(shop ? shop.id : null, ref);
       if (!order) continue; // Not an active order in this store; ignore silently
 
       const existingNotes = order.notes || "";
-      const cleanText = rawText.trim().replace(/\s+/g, " ");
 
       // Avoid duplicate appending
       if (existingNotes.includes(cleanText)) continue;
 
+      // Guardrail 2C: Terminal State Lock
+      // Orders that are already delivered, cancelled, or archived are IMMUTABLE.
+      if (TERMINAL_STATUSES.includes((order.status || "").toLowerCase())) {
+        console.warn(`[GUARDRAIL IGNORE] Order #${order.id.slice(0, 8)} is in terminal status '${order.status}'. Updates blocked.`);
+        continue;
+      }
+
+      // Guardrail 2D: Role Authority Check
+      // Community customer group can only record general customer notes; CANNOT advance pipeline!
+      const canAdvanceStation = context.role === "OPERATIONS" || context.role === "MANAGEMENT" || context.tier === "SYSTEM";
+
       const isLogistics = /\b(?:shelf|pack|packed|boxed|bagged|hold|station)\b/i.test(cleanText);
       const isDispatch = /\b(?:dispatch|dispatched|rider|courier|otieno|john|james|pickup|delivery|collected|sent|taking)\b/i.test(cleanText);
-      const isPayment = /\b(?:paid|mpesa|cash|received|settled)\b/i.test(cleanText);
 
-      // Select contextual reaction emoji & update payload
       let reactionEmoji = "📝";
       let patchPayload = {};
 
-      if (isDispatch) {
-        // SUPERPOWER 3: Automatic Rider / Courier Assignment
+      if (hasNegation) {
+        // If negated (e.g. "James is NOT taking order #832f"), record audit note only; DO NOT change status!
+        console.log(`[GUARDRAIL] Negated logistics statement recorded without status progression: "${cleanText}"`);
+        reactionEmoji = "⚠️";
+      } else if (isDispatch && canAdvanceStation) {
+        // Guardrail 2E: Unpaid Dispatch Protection
+        // Cannot dispatch an order that has not been paid!
+        if (order.status === "pending") {
+          console.warn(`[GUARDRAIL BLOCKED] Cannot dispatch unpaid order #${order.id.slice(0, 8)}.`);
+          reactionEmoji = "⚠️";
+          if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "⚠️");
+          if (safeSendMessage) {
+            await safeSendMessage(remoteJid, {
+              text: `⚠️ *Dispatch Blocked for Order #${order.id.slice(0, 8).toUpperCase()}*\n` +
+                    `Order is currently *UNPAID* (KES ${Number(order.total_price).toLocaleString()}).\n` +
+                    `Verify payment via \`!paid ${order.id.slice(0, 8)} <mpesa_code>\` before handing over to courier!`
+            });
+          }
+          return;
+        }
+
+        // Paid/verified order: Safe to dispatch!
         reactionEmoji = "🚚";
         patchPayload.status = "dispatched";
-      } else if (isLogistics) {
-        // SUPERPOWER 2: Passive Order Notes & Shelf Locations
+      } else if (isLogistics && canAdvanceStation) {
         reactionEmoji = "📦";
         if (order.internal_status === "CREATED" || order.internal_status === "PAID") {
           patchPayload.internal_status = "PROCESSING";
         }
-      } else if (isPayment) {
-        reactionEmoji = "💳";
-        patchPayload.status = "paid";
-        patchPayload.internal_status = "PAID";
       }
 
-      // Format updated notes
+      // Format updated notes with audit attribution
       const noteEntry = `• [${timeStr} @${callerName}]: ${cleanText}`;
       const newNotes = existingNotes ? `${existingNotes}\n${noteEntry}` : noteEntry;
       patchPayload.notes = newNotes;
@@ -363,8 +465,6 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
 
       if (updateRes.ok) {
         console.log(`[PASSIVE NOTE] Logged note for Order #${order.id.slice(0, 8)} (${reactionEmoji}): "${cleanText}"`);
-
-        // Tap emoji reaction on the user's message!
         if (safeReactMessage && messageKey) {
           await safeReactMessage(remoteJid, messageKey, reactionEmoji);
         }
