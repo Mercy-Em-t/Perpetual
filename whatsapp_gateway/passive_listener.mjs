@@ -190,6 +190,21 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
     // Guardrail: Ignore single-character noise, pure whitespace, or tiny strings
     if (cleanText.length < 5 && !msg.message?.imageMessage) return;
 
+    // Guardrail: Ignore bot's own formatted notification cards
+    if (
+      cleanText.includes("*Packaging Recorded —") ||
+      cleanText.includes("*Courier Dispatched —") ||
+      cleanText.includes("*Payment Auto-Reconciled —") ||
+      cleanText.includes("*Studio Preview Generated —") ||
+      cleanText.includes("*Product Auto-Listed (LIVE) —") ||
+      cleanText.includes("*Dispatch Blocked for Order") ||
+      cleanText.includes("*Duplicate M-Pesa Receipt!*") ||
+      cleanText.includes("*Ambiguous Payment Notice") ||
+      cleanText.includes("*Order Note Logged —")
+    ) {
+      return;
+    }
+
     // =========================================================================
     // SUPERPOWER 1: Automatic M-Pesa SMS Reconciler (with Safety Guardrails)
     // =========================================================================
@@ -422,7 +437,11 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
       const existingNotes = order.notes || "";
 
       // Avoid duplicate appending
-      if (existingNotes.includes(cleanText)) continue;
+      if (existingNotes.includes(cleanText)) {
+        console.log(`[PASSIVE NOTE] Duplicate note ignored for Order #${order.id.slice(0, 8)}`);
+        if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "✅");
+        continue;
+      }
 
       // Guardrail 2C: Terminal State Lock
       // Orders that are already delivered, cancelled, or archived are IMMUTABLE.
@@ -432,8 +451,14 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
       }
 
       // Guardrail 2D: Role Authority Check
-      // Community customer group can only record general customer notes; CANNOT advance pipeline!
-      const canAdvanceStation = context.role === "OPERATIONS" || context.role === "MANAGEMENT" || context.tier === "SYSTEM";
+      // Operations, Management, System admins, or Shop Owners can advance warehouse stations.
+      const ownerNumber = shop?.fulfillment_settings?.whatsapp_routing?.owner_phone
+        ? shop.fulfillment_settings.whatsapp_routing.owner_phone.replace(/@.*$/, "")
+        : "254710720949";
+      const isOwner = (shop?.whatsapp_number && senderId.includes(shop.whatsapp_number)) || 
+                      (senderId.includes(ownerNumber)) ||
+                      (senderId.includes("254710720949"));
+      const canAdvanceStation = context.role === "OPERATIONS" || context.role === "MANAGEMENT" || context.tier === "SYSTEM" || isOwner;
 
       const isLogistics = /\b(?:shelf|pack|packed|boxed|bagged|hold|station)\b/i.test(cleanText);
       const isDispatch = /\b(?:dispatch|dispatched|rider|courier|otieno|john|james|pickup|delivery|collected|sent|taking)\b/i.test(cleanText);
@@ -450,13 +475,13 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
         // Cannot dispatch an order that has not been paid!
         if (order.status === "pending") {
           console.warn(`[GUARDRAIL BLOCKED] Cannot dispatch unpaid order #${order.id.slice(0, 8)}.`);
-          reactionEmoji = "⚠️";
           if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "⚠️");
           if (safeSendMessage) {
             await safeSendMessage(remoteJid, {
               text: `⚠️ *Dispatch Blocked for Order #${order.id.slice(0, 8).toUpperCase()}*\n` +
-                    `Order is currently *UNPAID* (KES ${Number(order.total_price).toLocaleString()}).\n` +
-                    `Verify payment via \`!paid ${order.id.slice(0, 8)} <mpesa_code>\` before handing over to courier!`
+                    `• Order is currently *UNPAID* (KES ${Number(order.total_price).toLocaleString()}).\n` +
+                    `• Courier handover halted until payment is reconciled.\n` +
+                    `👉 Reply \`!paid ${order.id.slice(0, 8)} <mpesa_code>\` or paste M-Pesa SMS to clear.`
             });
           }
           return;
@@ -488,6 +513,32 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
         console.log(`[PASSIVE NOTE] Logged note for Order #${order.id.slice(0, 8)} (${reactionEmoji}): "${cleanText}"`);
         if (safeReactMessage && messageKey) {
           await safeReactMessage(remoteJid, messageKey, reactionEmoji);
+        }
+
+        // Deliver high-clarity WhatsApp receipt card for station movements and logged notes
+        if (safeSendMessage) {
+          const displayId = formatDisplayOrderId(order);
+          if (isLogistics && canAdvanceStation && !hasNegation) {
+            await safeSendMessage(remoteJid, {
+              text: `📦 *Packaging Recorded — ${shop?.name || "Order Update"}*\n` +
+                    `• Order: *${displayId}* (${order.client_name || "Guest"})\n` +
+                    `• Shelf / Location: _"${cleanText}"_\n` +
+                    `• Station: *PROCESSING (Boxed & Shelf-Ready)* ✅`
+            });
+          } else if (isDispatch && canAdvanceStation && !hasNegation) {
+            await safeSendMessage(remoteJid, {
+              text: `🚚 *Courier Dispatched — ${shop?.name || "Order Update"}*\n` +
+                    `• Order: *${displayId}* (${order.client_name || "Guest"})\n` +
+                    `• Hand-off Details: _"${cleanText}"_\n` +
+                    `• Station: *DISPATCHED (Out for Delivery)* ✅`
+            });
+          } else if (isOwner || canAdvanceStation) {
+            await safeSendMessage(remoteJid, {
+              text: hasNegation
+                ? `⚠️ *Logistics Exception Logged — ${shop?.name || "Order Update"}*\n• Order: *${displayId}*\n• Note: _"${cleanText}"_\n• Station progression halted.`
+                : `📝 *Order Note Logged — ${shop?.name || "Order Update"}*\n• Order: *${displayId}*\n• Note: _"${cleanText}"_ ✅`
+            });
+          }
         }
       }
     }
