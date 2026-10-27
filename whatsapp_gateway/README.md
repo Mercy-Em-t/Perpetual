@@ -46,6 +46,21 @@ Groups are partitioned into strict architectural tiers:
 * `!dispatch <order_id> [courier]` — Mark order fulfilled and handed over to courier
 * `!status` — Live open queue count, settled revenue today, and master till
 
+#### Supported Query Formats (`!order` & Station Commands):
+* **Short Hex Prefix:** `!order 5b0cd3f1` or `!order 832f1b75`
+* **Leading Hash:** `!order #5b0cd3f1` or `!order #832f1b75`
+* **Angle Brackets:** `!order <5b0cd3f1>` *(from documentation examples)*
+* **Full UUID:** `!order 832f1b75-f351-4984-97f1-7869214bc26f`
+* **Enterprise Prefix:** `!order ORD-DNH-261027-9K4E`
+* **Prefix Spacing Tolerance:** `! order 5b0cd3f1`, `! product`, `! summary`, and `/order` are automatically normalized.
+
+### Ambient "Read & Act" Superpowers
+When staff chat naturally without typing commands, the gateway passively listens:
+1. `💳` **Auto M-Pesa Reconciler:** Forwarded raw Safaricom SMS auto-matches pending order and marks as `PAID`.
+2. `📦` **Passive Order Notes:** Conversational shelf locations (`Order #832f packed on Shelf 2`) saved directly to `orders.notes`.
+3. `🚚` **Rider Assignments:** Staff messages (`James rider taking Westlands for #832f`) update status to `dispatched`.
+4. `📸` **Product Photo Ingestion:** Photos with captions auto-upload to Supabase CDN and create live storefront items.
+
 ### Product Catalog & Pricing (Management Only)
 * `!product list [category]` — View active products with short IDs and prices
 * `!product add` — Receive clean, copy-paste key-value product template
@@ -64,7 +79,23 @@ Groups are partitioned into strict architectural tiers:
 
 ---
 
-## 4. Starting the Gateway Daemon
+## 4. Security & Environment Configuration
+
+All credentials and database keys are isolated in `whatsapp_gateway/.env` (strictly ignored by Git):
+
+```ini
+SUPABASE_URL=https://ocsuqfabqsyrbsewcaez.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
+PORT=5174
+WHATSAPP_AUTH_DIR=C:\Users\user\Documents\Quality assurance\tms-whitelabel-core\docker-data\auth
+```
+
+* Zero hardcoded keys in tracked code (`config.mjs` loads via Node's native `process.loadEnvFile`).
+* Server handover to Pavilion (`100.73.175.118`) synchronizes `.env` directly via encrypted SSH/SCP without touching Git.
+
+---
+
+## 5. Starting the Gateway Daemon
 
 ```powershell
 # From this directory:
