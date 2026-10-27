@@ -23,6 +23,7 @@ export const KNOWN_COMMANDS = [
   "paid", "pack", "verify", "dispatch",
   "summary", "sales", "pulse",
   "product", "item", "items", "catalog",
+  "approve", "hide", "drafts", "policy",
   "shop", "shops", "stores", "bind",
   "ticket", "resolve"
 ];
@@ -520,8 +521,9 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
     }
   }
 
-  // 8. In-Chat Product & Catalog Management: !product
-  if (command === "!product" || command === "!item" || command === "!items" || command === "!catalog") {
+  // 8. In-Chat Product & Catalog Management: !product, !approve, !hide, !drafts, !policy
+  if (command === "!product" || command === "!item" || command === "!items" || command === "!catalog" ||
+      command === "!approve" || command === "!hide" || command === "!drafts" || command === "!policy") {
     if (!isMgmt) {
       await safeSendMessage(replyJid, {
         text: `🔒 *Access Restricted*\nProduct catalog management is restricted to *${shop.name} Management*.`
@@ -529,7 +531,13 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
       return;
     }
 
-    return await handleProductManagementCommand(args, replyJid, shop, safeSendMessage);
+    // Direct command shortcuts: !approve <id> -> subAction approve
+    let effectiveArgs = args;
+    if (command === "!approve" || command === "!hide" || command === "!drafts" || command === "!policy") {
+      effectiveArgs = `${command.slice(1)} ${args}`.trim();
+    }
+
+    return await handleProductManagementCommand(effectiveArgs, replyJid, shop, safeSendMessage);
   }
 
   // Fallback
@@ -920,9 +928,174 @@ async function handleProductManagementCommand(rawArgs, replyJid, shop, safeSendM
     }
   }
 
+  // 8f. Approve Draft: !product approve <id | all>
+  if (subAction === "approve") {
+    if (!subArgs) {
+      await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!product approve <ID or all>\`\nExample: \`!product approve 5b0cd3f1\` or \`!product approve all\`` });
+      return;
+    }
+
+    try {
+      if (subArgs.toLowerCase() === "all") {
+        const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/menu_items?shop_id=eq.${shop.id}&is_active=eq.false`, {
+          method: "PATCH",
+          headers: { ...dbHdrs, "Prefer": "return=representation" },
+          body: JSON.stringify({ is_active: true })
+        });
+        const approved = await patchRes.json();
+        const count = Array.isArray(approved) ? approved.length : 0;
+        await safeSendMessage(replyJid, {
+          text: `✅ *Batch Approved — ${shop.name}*\n` +
+                `Published *${count}* draft item(s) live to your storefront! 🌐`
+        });
+        return;
+      }
+
+      const res = await resolveShopProduct(shop.id, subArgs);
+      if (res.status === "NONE") {
+        await safeSendMessage(replyJid, { text: `❌ Could not find product matching: \`${subArgs}\`` });
+        return;
+      }
+      if (res.status === "AMBIGUOUS") {
+        const list = res.matches.map(m => `• *${m.name}* (\`${m.id.slice(0, 8)}\`)`).join("\n");
+        await safeSendMessage(replyJid, { text: `⚠️ Multiple matches found. Please specify by short ID:\n${list}` });
+        return;
+      }
+
+      const p = res.product;
+      const updated = await updateShopProductFields(shop.id, p.id, { is_active: true });
+      await safeSendMessage(replyJid, {
+        text: `✅ *Product Approved & Published — ${shop.name}*\n\n` +
+              `• *Item:* ${updated.name}\n` +
+              `• *Price:* KES ${Number(updated.price).toLocaleString()}\n` +
+              `• *Status:* LIVE on Storefront 🟢\n` +
+              `• *ID:* \`${updated.id.slice(0, 8)}\`\n\n` +
+              `_Customers can now order this item._`
+      });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Approval error: ${err.message}` });
+      return;
+    }
+  }
+
+  // 8g. Hide / Unpublish Product: !product hide <id>
+  if (subAction === "hide" || subAction === "unpublish") {
+    if (!subArgs) {
+      await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!product hide <ID or Name>\`` });
+      return;
+    }
+
+    try {
+      const res = await resolveShopProduct(shop.id, subArgs);
+      if (res.status === "NONE") {
+        await safeSendMessage(replyJid, { text: `❌ Could not find product matching: \`${subArgs}\`` });
+        return;
+      }
+      if (res.status === "AMBIGUOUS") {
+        const list = res.matches.map(m => `• *${m.name}* (\`${m.id.slice(0, 8)}\`)`).join("\n");
+        await safeSendMessage(replyJid, { text: `⚠️ Multiple matches found. Please specify by short ID:\n${list}` });
+        return;
+      }
+
+      const p = res.product;
+      const updated = await updateShopProductFields(shop.id, p.id, { is_active: false });
+      await safeSendMessage(replyJid, {
+        text: `🚫 *Product Unpublished (Hidden) — ${shop.name}*\n\n` +
+              `• *Item:* ${updated.name}\n` +
+              `• *Status:* Hidden from Storefront 🟡\n` +
+              `• *ID:* \`${updated.id.slice(0, 8)}\`\n\n` +
+              `👉 _To re-publish at any time:_ \`!product approve ${updated.id.slice(0, 8)}\``
+      });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Hide error: ${err.message}` });
+      return;
+    }
+  }
+
+  // 8h. View Drafts: !product drafts
+  if (subAction === "drafts" || subAction === "draft") {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/menu_items?shop_id=eq.${shop.id}&is_active=eq.false&select=id,name,price,category,created_at&order=created_at.desc`, { headers: dbHdrs });
+      const drafts = await res.json();
+
+      if (!drafts || drafts.length === 0) {
+        await safeSendMessage(replyJid, {
+          text: `✨ *${shop.name} Draft Vault*\n` +
+                `No pending drafts! All catalog products are published and live on your storefront.`
+        });
+        return;
+      }
+
+      let reply = `📋 *${shop.name} Pending Drafts (${drafts.length} awaiting approval)*\n\n`;
+      drafts.slice(0, 10).forEach((d, idx) => {
+        reply += `${idx + 1}. *${d.name}* — KES ${Number(d.price).toLocaleString()} (\`${d.id.slice(0, 8)}\`)\n`;
+      });
+      if (drafts.length > 10) {
+        reply += `\n_...and ${drafts.length - 10} more drafts._\n`;
+      }
+      reply += `\n👉 *Actions:*\n` +
+               `• Approve all: \`!product approve all\`\n` +
+               `• Approve one: \`!product approve <ID>\``;
+
+      await safeSendMessage(replyJid, { text: reply });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Drafts error: ${err.message}` });
+      return;
+    }
+  }
+
+  // 8i. View / Set Store Approval Policy: !product policy [optimistic | strict]
+  if (subAction === "policy") {
+    const currentPolicy = shop.fulfillment_settings?.product_approval_policy || "optimistic";
+    if (!subArgs) {
+      await safeSendMessage(replyJid, {
+        text: `⚙️ *Product Approval Policy — ${shop.name}*\n\n` +
+              `• Current Policy: *${currentPolicy.toUpperCase()}*\n` +
+              `  - *OPTIMISTIC*: Ingested photos go live immediately (reject by \`!hide\`).\n` +
+              `  - *STRICT*: Ingested photos stay in Draft mode until approved (\`!approve\`).\n\n` +
+              `👉 _To change policy:_ \`!product policy strict\` or \`!product policy optimistic\``
+      });
+      return;
+    }
+
+    const newPolicy = subArgs.toLowerCase().trim();
+    if (newPolicy !== "optimistic" && newPolicy !== "strict") {
+      await safeSendMessage(replyJid, { text: `⚠️ Invalid policy: choose either \`optimistic\` or \`strict\`.` });
+      return;
+    }
+
+    try {
+      const updatedFulfillment = {
+        ...(shop.fulfillment_settings || {}),
+        product_approval_policy: newPolicy
+      };
+      await fetch(`${SUPABASE_URL}/rest/v1/shops?id=eq.${shop.id}`, {
+        method: "PATCH",
+        headers: { ...dbHdrs, "Prefer": "return=minimal" },
+        body: JSON.stringify({ fulfillment_settings: updatedFulfillment })
+      });
+      shop.fulfillment_settings = updatedFulfillment;
+
+      await safeSendMessage(replyJid, {
+        text: `✅ *Approval Policy Updated — ${shop.name}*\n\n` +
+              `New Policy: *${newPolicy.toUpperCase()}*\n` +
+              (newPolicy === "strict" 
+                ? `🟡 New photos will now be saved as *Drafts* awaiting \`!product approve\`.\nView pending drafts with \`!product drafts\`.`
+                : `🟢 New photos will now publish *Live immediately* on your storefront.`)
+      });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Policy update error: ${err.message}` });
+      return;
+    }
+  }
+
   // Fallback for product subactions
   await safeSendMessage(replyJid, {
-    text: `❓ *Unknown product action:* \`${subAction}\`\n\n*Available Actions:*\n• \`!product list [category]\`\n• \`!product add\` (Get template)\n• \`!product edit <ID or Name>\`\n• \`!product price <ID or Name> <price>\`\n• \`!product stock [ID or Name] [in|out]\``
+    text: `❓ *Unknown product action:* \`${subAction}\`\n\n*Available Actions:*\n• \`!product list [category]\`\n• \`!product drafts\` (Pending approval)\n• \`!product approve <ID or all>\`\n• \`!product hide <ID>\`\n• \`!product policy [optimistic|strict]\`\n• \`!product add\` (Get template)\n• \`!product edit <ID or Name>\`\n• \`!product price <ID or Name> <price>\`\n• \`!product stock [ID or Name] [in|out]\``
   });
 }
 

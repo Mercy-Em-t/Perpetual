@@ -339,39 +339,60 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
           // Upload to Supabase Storage CDN
           const publicUrl = await uploadProductImageToStorage(shop.id, filename, buffer, "image/jpeg");
 
-          // Insert into Supabase products table
-          const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/products`, {
+          // Policy Check: Optimistic Auto-Publish vs Strict Review Mode
+          const policy = shop.fulfillment_settings?.product_approval_policy || "optimistic";
+          const isLive = policy === "optimistic";
+
+          // Insert into Supabase menu_items table (storefront catalog)
+          const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/menu_items`, {
             method: "POST",
             headers: { ...dbHdrs, "Prefer": "return=representation" },
             body: JSON.stringify({
-              business_id: shop.id,
+              shop_id: shop.id,
               name: parsed.name,
               description: `Uploaded via WhatsApp by @${callerName}`,
               price: parsed.price,
               category: parsed.category,
-              image_url: publicUrl
+              image_url: publicUrl,
+              is_active: isLive
             })
           });
 
           const insertedRows = await insertRes.json();
           const p = insertedRows?.[0];
 
-          if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "📸");
+          if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, isLive ? "📸" : "⏳");
 
           if (safeSendMessage && p) {
-            await safeSendMessage(remoteJid, {
-              text: `📸 *New Product Auto-Listed — ${shop.name}*\n` +
-                    `╭────────────────────────────────────────╮\n` +
-                    `  • Product: *${p.name}*\n` +
-                    `  • Price: *KES ${Number(p.price).toLocaleString()}*\n` +
-                    `  • Category: *${p.category || "General"}*\n` +
-                    `  • Image: *Studio CDN Stored* ✅\n` +
-                    `  • Storefront: *LIVE & Shoppable* 🌐\n` +
-                    `╰────────────────────────────────────────╯\n` +
-                    `_View on store or reply \`!product\` to review catalog._`
-            });
+            if (isLive) {
+              await safeSendMessage(remoteJid, {
+                text: `📸 *Product Auto-Listed (LIVE) — ${shop.name}*\n` +
+                      `╭────────────────────────────────────────╮\n` +
+                      `  • Product: *${p.name}*\n` +
+                      `  • Price: *KES ${Number(p.price).toLocaleString()}*\n` +
+                      `  • Category: *${p.category || "General"}*\n` +
+                      `  • Image: *Studio CDN Stored* ✅\n` +
+                      `  • Status: *LIVE on Storefront* 🟢\n` +
+                      `╰────────────────────────────────────────╯\n` +
+                      `_Item is live. To unpublish or hide, reply:_ \`!product hide ${p.id.slice(0, 8)}\``
+              });
+            } else {
+              await safeSendMessage(remoteJid, {
+                text: `📸 *Studio Preview Generated — ${shop.name}*\n` +
+                      `╭────────────────────────────────────────╮\n` +
+                      `  • Product: *${p.name}*\n` +
+                      `  • Price: *KES ${Number(p.price).toLocaleString()}*\n` +
+                      `  • Category: *${p.category || "General"}*\n` +
+                      `  • Image: *Studio CDN Stored* ✅\n` +
+                      `  • Status: 🟡 *Draft (Pending Approval)*\n` +
+                      `╰────────────────────────────────────────╯\n` +
+                      `👉 *Does this look display-grade?*\n` +
+                      `• Reply with: \`!product approve ${p.id.slice(0, 8)}\`\n` +
+                      `• Or view all drafts: \`!product drafts\``
+              });
+            }
           }
-          console.log(`[PASSIVE PHOTO] Successfully created product "${parsed.name}" for ${shop.name} (KES ${parsed.price})`);
+          console.log(`[PASSIVE PHOTO] Created product "${parsed.name}" for ${shop.name} (Live: ${isLive}, KES ${parsed.price})`);
           return;
         }
       } catch (photoErr) {
