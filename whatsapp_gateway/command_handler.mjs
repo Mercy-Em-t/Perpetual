@@ -260,6 +260,19 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
 
   // 1. Shop Help
   if (command === "!help") {
+    if (context.role === "COMMUNITY") {
+      const helpMsg =
+        `🛍️ *Welcome to the ${shop.name} Community!* 🛍️\n\n` +
+        `*Customer Commands:*\n` +
+        `• *!catalog* or *!items* — Browse active showcase products & prices\n` +
+        `• *!order <order_id>* — Check live delivery status & packaging notes\n` +
+        `• *!status* — View showroom pickup points & store opening status\n` +
+        `• *!help* — Show this customer guide\n\n` +
+        `_Visit our online storefront to place orders with direct M-Pesa checkout!_`;
+      await safeSendMessage(replyJid, { text: helpMsg });
+      return;
+    }
+
     if (isMgmt) {
       const helpMsg =
         `💼 *${shop.name} — Management Command Center*\n\n` +
@@ -524,20 +537,25 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
   // 8. In-Chat Product & Catalog Management: !product, !approve, !hide, !drafts, !policy
   if (command === "!product" || command === "!item" || command === "!items" || command === "!catalog" ||
       command === "!approve" || command === "!hide" || command === "!drafts" || command === "!policy") {
-    if (!isMgmt) {
+    
+    // Public catalog view is permitted for everyone (customers, community members, staff)
+    const isPublicCatalogView = (command === "!catalog" || command === "!items" || (command === "!product" && (!args || args.startsWith("list"))));
+    if (!isMgmt && !isPublicCatalogView) {
       await safeSendMessage(replyJid, {
-        text: `🔒 *Access Restricted*\nProduct catalog management is restricted to *${shop.name} Management*.`
+        text: `🔒 *Access Restricted*\nProduct catalog editing is restricted to *${shop.name} Management*.`
       });
       return;
     }
 
     // Direct command shortcuts: !approve <id> -> subAction approve
     let effectiveArgs = args;
-    if (command === "!approve" || command === "!hide" || command === "!drafts" || command === "!policy") {
+    if (command === "!catalog" || command === "!items") {
+      effectiveArgs = `list ${args}`.trim();
+    } else if (command === "!approve" || command === "!hide" || command === "!drafts" || command === "!policy") {
       effectiveArgs = `${command.slice(1)} ${args}`.trim();
     }
 
-    return await handleProductManagementCommand(effectiveArgs, replyJid, shop, safeSendMessage);
+    return await handleProductManagementCommand(effectiveArgs, replyJid, shop, safeSendMessage, isMgmt);
   }
 
   // Fallback
@@ -549,7 +567,7 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
 // =============================================================================
 // SUB-ROUTINE: PRODUCT MANAGEMENT WITH AMBIGUITY GUARDS & TEMPLATES
 // =============================================================================
-async function handleProductManagementCommand(rawArgs, replyJid, shop, safeSendMessage) {
+async function handleProductManagementCommand(rawArgs, replyJid, shop, safeSendMessage, isMgmt = true) {
   const parts = rawArgs.split(/\s+/);
   const subAction = parts[0] ? parts[0].toLowerCase() : "list";
   const subArgs = rawArgs.substring(subAction.length).trim();
@@ -560,11 +578,11 @@ async function handleProductManagementCommand(rawArgs, replyJid, shop, safeSendM
       const items = await listShopProducts(shop.id, subArgs);
       if (!items || items.length === 0) {
         await safeSendMessage(replyJid, {
-          text: `🏷️ *${shop.name} Catalog:*\nNo active items found matching category: \`${subArgs || "all"}\`.\n\n👉 Type *!product add* to create your first item!`
+          text: `🏷️ *${shop.name} Catalog:*\nNo active items found matching category: \`${subArgs || "all"}\`.\n\n${isMgmt ? "👉 Type *!product add* to create your first item!" : "Please check back later for new arrivals!"}`
         });
         return;
       }
-      let reply = `🏷️ *${shop.name} Catalog (${items.length} items)*\n\n`;
+      let reply = `🏷️ *${shop.name} Showcase (${items.length} items)*\n\n`;
       items.slice(0, 15).forEach(it => {
         const shortId = it.id.slice(0, 8);
         reply += `• *\`${shortId}\`* ${it.name} — *KES ${Number(it.price).toLocaleString()}* [_${it.category || "General"}_]\n`;
@@ -572,7 +590,11 @@ async function handleProductManagementCommand(rawArgs, replyJid, shop, safeSendM
       if (items.length > 15) {
         reply += `\n_...and ${items.length - 15} more items._`;
       }
-      reply += `\n\n👉 *Quick Actions:*\n• Edit item: \`!product edit <ID or Name>\`\n• Change price: \`!product price <ID or Name> <NewPrice>\`\n• Add new: \`!product add\``;
+      if (isMgmt) {
+        reply += `\n\n👉 *Quick Actions:*\n• Edit item: \`!product edit <ID or Name>\`\n• Change price: \`!product price <ID or Name> <NewPrice>\`\n• Add new: \`!product add\``;
+      } else {
+        reply += `\n\n🛍️ _Visit our storefront link to order with instant M-Pesa payment._`;
+      }
       await safeSendMessage(replyJid, { text: reply });
       return;
     } catch (err) {
@@ -1290,17 +1312,45 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
 async function handleDirectMessageCommand(command, args, replyJid, senderId, callerName, safeSendMessage) {
   if (command === "!help") {
     await safeSendMessage(replyJid, {
-      text: `👋 Hello! I am your Savannah shopping and delivery assistant.\n\n` +
+      text: `👋 Hello! I am your Savannah shopping & delivery assistant.\n\n` +
             `• *!order <order_id>*: Check your delivery status and live package tracking.\n` +
+            `• *!order*: Automatically view all your recent active orders.\n` +
+            `• *!shops*: View active partner boutique storefronts.\n` +
             `• *!help*: Show this guide.\n\n` +
-            `_To order products, please visit our online storefront link._`
+            `_To shop, visit any of our boutique storefronts with instant M-Pesa checkout!_`
     });
     return;
   }
 
-  if (command === "!order" || command === "!status") {
+  if (command === "!order" || command === "!status" || command === "!track") {
     const orderId = args.trim();
     if (!orderId) {
+      // Auto-lookup by customer phone number
+      const digits = (senderId || "").replace(/[^0-9]/g, "");
+      const searchSuffix = digits.slice(-9); // last 9 digits (e.g. 710720949)
+      if (searchSuffix.length >= 7) {
+        try {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?client_phone=ilike.*${searchSuffix}*&order=created_at.desc&limit=3&select=id,status,internal_status,total_price,notes,created_at,shop_id`, { headers: dbHdrs });
+          const userOrders = await res.json();
+          if (Array.isArray(userOrders) && userOrders.length > 0) {
+            let msg = `📦 *Your Recent Orders:*\n\n`;
+            userOrders.forEach(o => {
+              const displayId = formatDisplayOrderId(o);
+              const status = (o.status || "PENDING").toUpperCase();
+              msg += `• *${displayId}* — KES ${Number(o.total_price).toLocaleString()} | Status: *${status}*\n`;
+              if (o.notes) {
+                const lastLine = o.notes.split('\n').filter(Boolean).pop();
+                if (lastLine) msg += `  _${lastLine}_\n`;
+              }
+            });
+            msg += `\n_Reply with \`!order <order_id>\` for detailed station tracking._`;
+            await safeSendMessage(replyJid, { text: msg });
+            return;
+          }
+        } catch (phoneErr) {
+          console.error("Phone order lookup error:", phoneErr);
+        }
+      }
       await safeSendMessage(replyJid, { text: `⚠️ Please provide your order number: \`!order <order_id>\`` });
       return;
     }
@@ -1312,9 +1362,16 @@ async function handleDirectMessageCommand(command, args, replyJid, senderId, cal
         return;
       }
       const displayId = formatDisplayOrderId(o);
-      await safeSendMessage(replyJid, {
-        text: `📦 *Order Tracking: ${displayId}*\n• Status: *${(o.status || "PENDING").toUpperCase()}*\n• Total: KES ${Number(o.total_price).toLocaleString()}\n• Date: ${new Date(o.created_at).toLocaleDateString()}`
-      });
+      let replyText = `📦 *Order Tracking: ${displayId}*\n` +
+                      `• Status: *${(o.status || "PENDING").toUpperCase()}*\n` +
+                      `• Total: *KES ${Number(o.total_price).toLocaleString()}*\n` +
+                      `• Customer: ${o.client_name || "Guest"}\n` +
+                      `• Date Placed: ${new Date(o.created_at).toLocaleDateString()}\n`;
+      if (o.notes) {
+        const lastLine = o.notes.split('\n').filter(Boolean).pop();
+        if (lastLine) replyText += `• Station Note: _${lastLine}_\n`;
+      }
+      await safeSendMessage(replyJid, { text: replyText });
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Tracking lookup error: ${err.message}` });
@@ -1323,6 +1380,6 @@ async function handleDirectMessageCommand(command, args, replyJid, senderId, cal
   }
 
   await safeSendMessage(replyJid, {
-    text: `👋 Hi there! Reply with *!help* to check available customer options.`
+    text: `👋 Hi there! Reply with *!help* to view your available customer options or *!order* to check your tracking.`
   });
 }
