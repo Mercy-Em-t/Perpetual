@@ -11,6 +11,7 @@ import makeWASocket, {
 
 import { HTTP_PORT, AUTH_DIR, GROUPS } from "./config.mjs";
 import { KNOWN_COMMANDS, handleInboundCommand } from "./command_handler.mjs";
+import { handlePassiveGroupMessage } from "./passive_listener.mjs";
 import { createHttpRouter } from "./http_routes.mjs";
 
 console.log(`[WHATSAPP GATEWAY] Using Auth Directory: ${AUTH_DIR}`);
@@ -30,6 +31,24 @@ async function safeSendMessage(jid, content) {
     return await sock.sendMessage(jid, content);
   } catch (err) {
     console.error(`[WHATSAPP SEND ERROR] to ${jid}:`, err.message);
+    return null;
+  }
+}
+
+async function safeReactMessage(jid, key, emoji) {
+  if (!sock || connectionState !== "open") {
+    console.warn(`[WHATSAPP] Cannot send reaction: socket not open (state: ${connectionState})`);
+    return null;
+  }
+  try {
+    return await sock.sendMessage(jid, {
+      react: {
+        text: emoji,
+        key: key
+      }
+    });
+  } catch (err) {
+    console.error(`[WHATSAPP REACT ERROR] in ${jid}:`, err.message);
     return null;
   }
 }
@@ -102,7 +121,6 @@ async function startWhatsAppBot() {
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       console.log(`[WHATSAPP] Connection closed (code: ${statusCode}). Reconnecting: ${shouldReconnect}`);
       if (shouldReconnect) {
-        // Exponential backoff up to 30 seconds when encountering code 440 (stream replaced / multi-device clash)
         reconnectCount++;
         const delay = statusCode === 440 ? Math.min(30000, 4000 * Math.pow(1.5, Math.min(reconnectCount, 5))) : 5000;
         console.log(`[WHATSAPP] Scheduling reconnect in ${(delay / 1000).toFixed(1)}s (Attempt #${reconnectCount})...`);
@@ -136,32 +154,54 @@ async function startWhatsAppBot() {
       let trimmed = text.trim();
       if (!trimmed) continue;
 
+      // Normalize leading prefix and space: e.g. "! product" -> "!product", "/help" -> "!help"
+      let normalized = trimmed.replace(/^([!/])\s+/, "$1");
+      if (normalized.startsWith("/")) {
+        normalized = "!" + normalized.slice(1);
+      }
+
       const senderId = msg.key.participant || msg.key.remoteJid;
       const isDirectMessage = remoteJid.endsWith("@s.whatsapp.net");
+      const isGroup = remoteJid.endsWith("@g.us");
       const isMentioned = botJid && msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.includes(botJid);
-      const firstWord = trimmed.split(/\s+/)[0].toLowerCase().replace(/^!/, "");
-      const isCommand = trimmed.startsWith("!") || KNOWN_COMMANDS.includes(firstWord);
+      const firstWord = normalized.split(/\s+/)[0].toLowerCase().replace(/^!/, "");
+      const hasPrefix = normalized.startsWith("!");
+
+      let isCommand = false;
+      let effectiveCommandText = normalized;
+
+      if (isGroup) {
+        // Group Discussion Privacy Rule:
+        // In groups, the bot ONLY triggers on explicit '!' commands or direct @mentions.
+        // This guarantees staff and managers can hold normal human conversations freely.
+        if (hasPrefix) {
+          isCommand = true;
+        } else if (isMentioned) {
+          const botNum = botJid ? botJid.replace(/@.*$/, "") : "";
+          const textWithoutTag = trimmed.replace(new RegExp(`@${botNum}`, "g"), "").trim();
+          if (textWithoutTag) {
+            isCommand = true;
+            effectiveCommandText = textWithoutTag.startsWith("!") ? textWithoutTag : "!" + textWithoutTag;
+          }
+        }
+      } else if (isDirectMessage) {
+        // In 1-on-1 Customer DMs: accept '!' or natural keywords (help, status, order)
+        if (hasPrefix) {
+          isCommand = true;
+        } else if (KNOWN_COMMANDS.includes(firstWord)) {
+          isCommand = true;
+          effectiveCommandText = "!" + trimmed;
+        }
+      }
 
       if (isCommand) {
-        if (!trimmed.startsWith("!")) {
-          trimmed = "!" + trimmed;
-        }
-        console.log(`[WHATSAPP INBOUND] Command from ${senderId} in ${remoteJid}: "${trimmed}"`);
-        await handleInboundCommand(trimmed, remoteJid, senderId, safeSendMessage);
-      } else if (isDirectMessage || isMentioned) {
-        // Conversational assistance from any other group or private DM
-        console.log(`[WHATSAPP INBOUND] Direct query from ${senderId}: "${trimmed}"`);
-        const callerName = senderId ? senderId.replace(/@.*$/, "") : "User";
-        const reply =
-          `👋 *Hello @${callerName}!*\n` +
-          `I am your *Perpetua Shared Agent Room Assistant*.\n\n` +
-          `You can message me from any group or private chat to manage and inspect your system:\n` +
-          `• *!status* — View real-time room health and vitals\n` +
-          `• *!pool* — Inspect active task pipeline\n` +
-          `• *!orders* — View live storefront orders\n` +
-          `• *!details <id>* — Deep-dive audit into any task or order\n` +
-          `• *!help* — View all available commands`;
-        await safeSendMessage(remoteJid, { text: reply });
+        console.log(`[WHATSAPP INBOUND] Command from ${senderId} in ${remoteJid}: "${effectiveCommandText}"`);
+        await handleInboundCommand(effectiveCommandText, remoteJid, senderId, safeSendMessage);
+      } else if (!msg.key.fromMe) {
+        // PASSIVE AMBIENT LISTENER:
+        // Reads conversational order notes, forwarded M-Pesa receipts, courier handoffs,
+        // or product photos. Updates Supabase silently and places zero-spam emoji reactions.
+        await handlePassiveGroupMessage(trimmed, remoteJid, senderId, msg, safeReactMessage, safeSendMessage, sock);
       }
     }
   });
@@ -172,7 +212,8 @@ const router = createHttpRouter({
   GROUPS,
   getConnectionState: () => connectionState,
   getBotJid: () => botJid,
-  safeSendMessage
+  safeSendMessage,
+  getSock: () => sock
 });
 
 const server = http.createServer(router);
