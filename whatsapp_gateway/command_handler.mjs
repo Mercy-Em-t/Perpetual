@@ -24,6 +24,7 @@ export const KNOWN_COMMANDS = [
   "summary", "sales", "pulse",
   "product", "item", "items", "catalog",
   "approve", "hide", "drafts", "policy",
+  "resurrect", "revive", "reorder", "repeat", "buyagain",
   "shop", "shops", "stores", "bind",
   "ticket", "resolve"
 ];
@@ -193,9 +194,9 @@ async function handleShopBindCommand(args, replyJid, senderId, callerName, safeS
     const shops = await getAllShops();
     const slugList = shops.slice(0, 8).map(s => `\`${s.slug}\``).join(", ");
     await safeSendMessage(replyJid, {
-      text: `⚠️ *Usage:* \`!shop bind <shop_slug> [ops | mgmt]\`\n\n` +
+      text: `⚠️ *Usage:* \`!shop bind <shop_slug> [ops | mgmt | comm | channel]\`\n\n` +
             `*Available shop slugs:*\n${slugList}...\n\n` +
-            `*Examples:*\n• \`!shop bind haberdashery ops\`\n• \`!shop bind creative-galore mgmt\`\n\n` +
+            `*Examples:*\n• \`!shop bind haberdashery ops\`\n• \`!shop bind creative-galore mgmt\`\n• \`!shop bind haberdashery channel\`\n\n` +
             `👉 _Type *!shops* to view the full directory of all ${shops.length} registered shops and their live WhatsApp links._`
     });
     return;
@@ -210,8 +211,9 @@ async function handleShopBindCommand(args, replyJid, senderId, callerName, safeS
     return;
   }
 
-  const targetField = role.startsWith("m") ? "management_jid" : role.startsWith("c") ? "community_jid" : "operations_jid";
-  const roleLabel = targetField === "management_jid" ? "Management Oversight" : targetField === "community_jid" ? "Community Channel" : "Floor Operations";
+  const isChannel = role.includes("chan") || role.includes("news") || replyJid.endsWith("@newsletter");
+  const targetField = role.startsWith("m") ? "management_jid" : isChannel ? "channel_jid" : role.startsWith("c") ? "community_jid" : "operations_jid";
+  const roleLabel = targetField === "management_jid" ? "Management Oversight" : targetField === "channel_jid" ? "Public Broadcast Channel" : targetField === "community_jid" ? "Community Channel" : "Floor Operations";
 
   const settings = matched.fulfillment_settings || {};
   settings.whatsapp_routing = settings.whatsapp_routing || {};
@@ -556,6 +558,16 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
     }
 
     return await handleProductManagementCommand(effectiveArgs, replyJid, shop, safeSendMessage, isMgmt);
+  }
+
+  // 9. Order Resurrection: !resurrect <order_id> or !revive <order_id>
+  if (command === "!resurrect" || command === "!revive") {
+    return await handleResurrectCommand(args, replyJid, senderId, callerName, safeSendMessage, shop);
+  }
+
+  // 10. 1-Tap Re-order: !reorder <order_id> or !repeat or !buyagain
+  if (command === "!reorder" || command === "!repeat" || command === "!buyagain") {
+    return await handleReorderCommand(args, replyJid, senderId, callerName, safeSendMessage, shop);
   }
 
   // Fallback
@@ -994,6 +1006,9 @@ async function handleProductManagementCommand(rawArgs, replyJid, shop, safeSendM
               `• *ID:* \`${updated.id.slice(0, 8)}\`\n\n` +
               `_Customers can now order this item._`
       });
+
+      // Auto-broadcast new drop to WhatsApp Channel if configured
+      await broadcastProductToChannel(shop, updated, safeSendMessage);
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Approval error: ${err.message}` });
@@ -1315,11 +1330,23 @@ async function handleDirectMessageCommand(command, args, replyJid, senderId, cal
       text: `👋 Hello! I am your Savannah shopping & delivery assistant.\n\n` +
             `• *!order <order_id>*: Check your delivery status and live package tracking.\n` +
             `• *!order*: Automatically view all your recent active orders.\n` +
+            `• *!resurrect <order_id>*: Revive an expired or unpaid order with fresh M-Pesa window.\n` +
+            `• *!reorder <order_id>*: 1-tap re-order from your previous purchases.\n` +
             `• *!shops*: View active partner boutique storefronts.\n` +
             `• *!help*: Show this guide.\n\n` +
             `_To shop, visit any of our boutique storefronts with instant M-Pesa checkout!_`
     });
     return;
+  }
+
+  // 1. Order Resurrection: !resurrect <order_id> or !revive <order_id>
+  if (command === "!resurrect" || command === "!revive") {
+    return await handleResurrectCommand(args, replyJid, senderId, callerName, safeSendMessage);
+  }
+
+  // 2. 1-Tap Re-order: !reorder <order_id> or !repeat or !buyagain
+  if (command === "!reorder" || command === "!repeat" || command === "!buyagain") {
+    return await handleReorderCommand(args, replyJid, senderId, callerName, safeSendMessage);
   }
 
   if (command === "!order" || command === "!status" || command === "!track") {
@@ -1382,4 +1409,322 @@ async function handleDirectMessageCommand(command, args, replyJid, senderId, cal
   await safeSendMessage(replyJid, {
     text: `👋 Hi there! Reply with *!help* to view your available customer options or *!order* to check your tracking.`
   });
+}
+
+// =============================================================================
+// SUB-ROUTINE: ORDER RESURRECTION (Payment Recovery & Cart Revival)
+// =============================================================================
+export async function handleResurrectCommand(orderQuery, replyJid, senderId, callerName, safeSendMessage, shopContext = null) {
+  let targetQuery = (orderQuery || "").trim();
+
+  if (!targetQuery) {
+    // If no order ID was given, check if customer has recent expired/pending orders
+    const digits = (senderId || "").replace(/[^0-9]/g, "");
+    const searchSuffix = digits.slice(-9);
+    if (searchSuffix.length >= 7) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?client_phone=ilike.*${searchSuffix}*&status=neq.paid&status=neq.dispatched&order=created_at.desc&limit=1`, { headers: dbHdrs });
+        const recent = await res.json();
+        if (Array.isArray(recent) && recent.length > 0) {
+          targetQuery = recent[0].id;
+        }
+      } catch (err) {
+        console.error("Auto order detect error:", err.message);
+      }
+    }
+  }
+
+  if (!targetQuery) {
+    await safeSendMessage(replyJid, {
+      text: `⚠️ *Please provide an order number:* \`!resurrect <order_id>\`\n_Example:_ \`!resurrect 832f1b75\``
+    });
+    return;
+  }
+
+  try {
+    const order = await resolveShopOrder(shopContext?.id || null, targetQuery);
+    if (!order) {
+      await safeSendMessage(replyJid, {
+        text: `❌ *Order Not Found:* Could not locate order matching \`${targetQuery}\`.\nPlease check your order receipt number.`
+      });
+      return;
+    }
+
+    // Check if already paid/completed
+    if (order.status === "paid" || order.status === "dispatched" || order.status === "completed") {
+      const displayId = formatDisplayOrderId(order);
+      await safeSendMessage(replyJid, {
+        text: `ℹ️ *Order ${displayId} is already paid & active!* (Status: *${order.status.toUpperCase()}*)\n\n` +
+              `👉 _To re-order these exact items again, reply with:_ \`!reorder ${order.id.slice(0, 8)}\``
+      });
+      return;
+    }
+
+    // Fetch shop details for Till number & routing
+    let shop = shopContext;
+    if (!shop) {
+      const shopRes = await fetch(`${SUPABASE_URL}/rest/v1/shops?id=eq.${order.shop_id}&select=id,name,slug,mpesa_till_number,phone,fulfillment_settings`, { headers: dbHdrs });
+      shop = (await shopRes.json())?.[0];
+    }
+
+    // Fetch order items
+    const itemsRes = await fetch(`${SUPABASE_URL}/rest/v1/order_items?order_id=eq.${order.id}&select=*,menu_items(id,name,price,is_active)`, { headers: dbHdrs });
+    const orderItems = await itemsRes.json();
+
+    let itemsSummary = "";
+    if (Array.isArray(orderItems) && orderItems.length > 0) {
+      itemsSummary = orderItems.map(it => `• ${it.quantity}x *${it.menu_items?.name || "Boutique Item"}* — KES ${(Number(it.price) * it.quantity).toLocaleString()}`).join("\n");
+    } else {
+      itemsSummary = `• Custom Order Items — KES ${Number(order.total_price).toLocaleString()}`;
+    }
+
+    // Extend expiry by 2 hours from now
+    const now = new Date();
+    const newExpiresAt = new Date(Date.now() + 2 * 3600 * 1000);
+    const expiryTimeStr = `${String(newExpiresAt.getHours()).padStart(2, '0')}:${String(newExpiresAt.getMinutes()).padStart(2, '0')}`;
+    const timeStr = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const existingNotes = order.notes || "";
+    const updatedNotes = existingNotes
+      ? `${existingNotes}\n• [${timeStr} @${callerName}]: Resurrected order via WhatsApp (Extended to ${expiryTimeStr})`
+      : `• [${timeStr} @${callerName}]: Resurrected order via WhatsApp (Extended to ${expiryTimeStr})`;
+
+    // Update Supabase
+    await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${order.id}`, {
+      method: "PATCH",
+      headers: { ...dbHdrs, "Prefer": "return=minimal" },
+      body: JSON.stringify({
+        status: "pending",
+        internal_status: "PENDING_PAYMENT",
+        expires_at: newExpiresAt.toISOString(),
+        notes: updatedNotes
+      })
+    });
+
+    const displayId = formatDisplayOrderId(order);
+    const tillNumber = shop?.mpesa_till_number || "4082211";
+
+    // Send customer the Resurrection Card
+    await safeSendMessage(replyJid, {
+      text: `⚡ *Order ${displayId} Resurrected!* ⚡\n` +
+            `╭────────────────────────────────────────╮\n` +
+            `  • Shop: *${shop?.name || "Savannah Atelier"}*\n` +
+            `  • Customer: *${order.client_name || "Valued Customer"}*\n` +
+            `  • Total Due: *KES ${Number(order.total_price).toLocaleString()}*\n` +
+            `  • Payment Window: *Extended to ${expiryTimeStr}* ⏰\n` +
+            `╰────────────────────────────────────────╯\n\n` +
+            `📦 *Reserved Items:*\n${itemsSummary}\n\n` +
+            `💳 *How to Complete Payment:*\n` +
+            `1. Go to M-Pesa ➔ Buy Goods and Services\n` +
+            `2. Enter Till Number: *${tillNumber}*\n` +
+            `3. Enter Amount: *KES ${Number(order.total_price).toLocaleString()}*\n\n` +
+            `👉 _Once paid, simply forward or paste your Safaricom M-Pesa SMS here to instantly verify & trigger dispatch!_`
+    });
+
+    // Alert Floor Operations in the shop's Operations Group
+    const opsJid = shop?.fulfillment_settings?.whatsapp_routing?.operations_jid;
+    if (opsJid && safeSendMessage) {
+      await safeSendMessage(opsJid, {
+        text: `🔥 *Customer Resurrected Order ${displayId}!* (${shop?.name || "Store"})\n` +
+              `• Customer: *${order.client_name || "Guest"}* (${order.client_phone || callerName})\n` +
+              `• Amount: *KES ${Number(order.total_price).toLocaleString()}* (Awaiting M-Pesa)\n` +
+              `• Payment Window: Active until ${expiryTimeStr} ⏰\n` +
+              `_Floor staff: Keep items staged on reserve shelf._`
+      });
+    }
+
+  } catch (err) {
+    console.error("[RESURRECT ERROR]:", err);
+    await safeSendMessage(replyJid, { text: `❌ Resurrection failed: ${err.message}` });
+  }
+}
+
+// =============================================================================
+// SUB-ROUTINE: 1-TAP RE-ORDER / BUY AGAIN
+// =============================================================================
+export async function handleReorderCommand(orderQuery, replyJid, senderId, callerName, safeSendMessage, shopContext = null) {
+  let targetQuery = (orderQuery || "").trim();
+
+  if (!targetQuery) {
+    // If no order ID was given, check for customer's most recent order by phone
+    const digits = (senderId || "").replace(/[^0-9]/g, "");
+    const searchSuffix = digits.slice(-9);
+    if (searchSuffix.length >= 7) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?client_phone=ilike.*${searchSuffix}*&order=created_at.desc&limit=1`, { headers: dbHdrs });
+        const recent = await res.json();
+        if (Array.isArray(recent) && recent.length > 0) {
+          targetQuery = recent[0].id;
+        }
+      } catch (err) {
+        console.error("Auto reorder detect error:", err.message);
+      }
+    }
+  }
+
+  if (!targetQuery) {
+    await safeSendMessage(replyJid, {
+      text: `⚠️ *Please provide an order number to re-order:* \`!reorder <order_id>\`\n_Example:_ \`!reorder 5b0cd3f1\``
+    });
+    return;
+  }
+
+  try {
+    const origOrder = await resolveShopOrder(shopContext?.id || null, targetQuery);
+    if (!origOrder) {
+      await safeSendMessage(replyJid, {
+        text: `❌ *Order Not Found:* Could not locate past order matching \`${targetQuery}\`.`
+      });
+      return;
+    }
+
+    // Fetch shop details
+    let shop = shopContext;
+    if (!shop) {
+      const shopRes = await fetch(`${SUPABASE_URL}/rest/v1/shops?id=eq.${origOrder.shop_id}&select=id,name,slug,mpesa_till_number,phone,fulfillment_settings`, { headers: dbHdrs });
+      shop = (await shopRes.json())?.[0];
+    }
+
+    // Fetch items from previous order
+    const itemsRes = await fetch(`${SUPABASE_URL}/rest/v1/order_items?order_id=eq.${origOrder.id}&select=*,menu_items(id,name,price,is_active)`, { headers: dbHdrs });
+    const origItems = await itemsRes.json();
+
+    if (!Array.isArray(origItems) || origItems.length === 0) {
+      await safeSendMessage(replyJid, {
+        text: `❌ *Cannot Re-order:* Order #${origOrder.id.slice(0, 8).toUpperCase()} has no catalog item records.`
+      });
+      return;
+    }
+
+    let calculatedTotal = 0;
+    const clonedItemPayloads = [];
+    const itemLines = [];
+
+    for (const it of origItems) {
+      const unitPrice = it.menu_items?.price ?? it.price;
+      const lineTotal = Number(unitPrice) * it.quantity;
+      calculatedTotal += lineTotal;
+      clonedItemPayloads.push({
+        menu_item_id: it.menu_item_id,
+        quantity: it.quantity,
+        price: unitPrice
+      });
+      itemLines.push(`• ${it.quantity}x *${it.menu_items?.name || "Boutique Item"}* — KES ${lineTotal.toLocaleString()}`);
+    }
+
+    const now = new Date();
+    const timeStr = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const newExpiresAt = new Date(Date.now() + 2 * 3600 * 1000);
+
+    // Create fresh order in Supabase
+    const newOrderPayload = {
+      shop_id: origOrder.shop_id,
+      table_id: origOrder.table_id || "WhatsApp",
+      total_price: calculatedTotal,
+      status: "pending",
+      internal_status: "CREATED",
+      fulfillment_type: origOrder.fulfillment_type || "delivery",
+      client_name: origOrder.client_name || "Valued Customer",
+      client_phone: origOrder.client_phone || senderId.replace(/@.*$/, ""),
+      delivery_address: origOrder.delivery_address || "",
+      parent_order_id: origOrder.id,
+      order_type: "direct",
+      expires_at: newExpiresAt.toISOString(),
+      notes: `• [${timeStr} @${callerName}]: 1-Tap Re-order cloned from #${origOrder.id.slice(0, 8).toUpperCase()}`
+    };
+
+    const createRes = await fetch(`${SUPABASE_URL}/rest/v1/orders`, {
+      method: "POST",
+      headers: { ...dbHdrs, "Prefer": "return=representation" },
+      body: JSON.stringify(newOrderPayload)
+    });
+
+    const [createdOrder] = await createRes.json();
+    if (!createdOrder) {
+      throw new Error("Failed to insert new order record in Supabase.");
+    }
+
+    // Insert cloned order items
+    const itemsToInsert = clonedItemPayloads.map(it => ({
+      order_id: createdOrder.id,
+      menu_item_id: it.menu_item_id,
+      quantity: it.quantity,
+      price: it.price
+    }));
+
+    await fetch(`${SUPABASE_URL}/rest/v1/order_items`, {
+      method: "POST",
+      headers: dbHdrs,
+      body: JSON.stringify(itemsToInsert)
+    });
+
+    const displayId = formatDisplayOrderId(createdOrder);
+    const tillNumber = shop?.mpesa_till_number || "4082211";
+
+    // Reply to customer with newly created order
+    await safeSendMessage(replyJid, {
+      text: `🛍️ *New Order Created from Your Favorites!* 🛍️\n` +
+            `╭────────────────────────────────────────╮\n` +
+            `  • New Order: *${displayId}*\n` +
+            `  • Shop: *${shop?.name || "Savannah Store"}*\n` +
+            `  • Total Due: *KES ${Number(createdOrder.total_price).toLocaleString()}*\n` +
+            `  • Cloned From: *#${origOrder.id.slice(0, 8).toUpperCase()}*\n` +
+            `╰────────────────────────────────────────╯\n\n` +
+            `📦 *Items In Order:*\n${itemLines.join("\n")}\n\n` +
+            `💳 *Payment Instructions:*\n` +
+            `• Buy Goods Till Number: *${tillNumber}*\n` +
+            `• Amount: *KES ${Number(createdOrder.total_price).toLocaleString()}*\n` +
+            `• Reference: \`${createdOrder.id.slice(0, 8).toUpperCase()}\`\n\n` +
+            `👉 _Once paid, reply with your M-Pesa SMS confirmation to auto-dispatch!_`
+    });
+
+    // Alert Floor Operations
+    const opsJid = shop?.fulfillment_settings?.whatsapp_routing?.operations_jid;
+    if (opsJid && safeSendMessage) {
+      await safeSendMessage(opsJid, {
+        text: `🛍️ *New Customer 1-Tap Re-Order!* (${shop?.name || "Store"})\n` +
+              `• New Order: *${displayId}* (${createdOrder.client_name})\n` +
+              `• Total: *KES ${Number(createdOrder.total_price).toLocaleString()}* (Awaiting payment)\n` +
+              `• Cloned From: #${origOrder.id.slice(0, 8).toUpperCase()}\n` +
+              `_Station: Pending payment verification._`
+      });
+    }
+
+  } catch (err) {
+    console.error("[REORDER ERROR]:", err);
+    await safeSendMessage(replyJid, { text: `❌ Re-order failed: ${err.message}` });
+  }
+}
+
+// =============================================================================
+// SUB-ROUTINE: WHATSAPP CHANNEL BROADCASTING (@newsletter)
+// =============================================================================
+export async function broadcastProductToChannel(shop, product, safeSendMessage) {
+  const channelJid = shop?.fulfillment_settings?.whatsapp_routing?.channel_jid;
+  if (!channelJid || !safeSendMessage) return;
+
+  const shopPhone = (shop.whatsapp_number || "254710720949").replace(/[^0-9]/g, "");
+  const priceStr = Number(product.price).toLocaleString();
+  const textMsg =
+    `✨ *NEW ARRIVAL AT ${shop.name.toUpperCase()}* ✨\n\n` +
+    `👗 *${product.name}*\n` +
+    `• Price: *KES ${priceStr}*\n` +
+    `• Category: *${product.category || "General"}*\n` +
+    `• In Stock: *Available Now* ✅\n\n` +
+    `💬 *To order via WhatsApp:* wa.me/${shopPhone}?text=!order%20${product.id.slice(0, 8)}\n` +
+    `🌐 *Storefront:* https://${shop.slug}.savannahatelier.com`;
+
+  try {
+    if (product.image_url) {
+      await safeSendMessage(channelJid, {
+        image: { url: product.image_url },
+        caption: textMsg
+      });
+    } else {
+      await safeSendMessage(channelJid, { text: textMsg });
+    }
+    console.log(`[CHANNEL BROADCAST] Published "${product.name}" to channel ${channelJid}`);
+  } catch (err) {
+    console.error(`[CHANNEL BROADCAST ERROR]:`, err.message);
+  }
 }

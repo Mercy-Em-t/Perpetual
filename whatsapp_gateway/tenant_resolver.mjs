@@ -85,6 +85,9 @@ export async function resolveGroupContext(replyJid) {
     if (routing.community_jid === replyJid) {
       return { tier: "SHOP", role: "COMMUNITY", shop };
     }
+    if (routing.channel_jid === replyJid) {
+      return { tier: "SHOP", role: "CHANNEL", shop };
+    }
   }
 
   return { tier: "UNREGISTERED", jid: replyJid };

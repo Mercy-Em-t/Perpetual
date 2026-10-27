@@ -9,8 +9,8 @@
  *  6. Anti-Junk Photo Ingestion (Sanity checks on price, item name, and management authority)
  */
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
-import { resolveGroupContext, resolveShopOrder } from "./tenant_resolver.mjs";
-import { formatDisplayOrderId } from "./command_handler.mjs";
+import { resolveGroupContext, resolveShopOrder, getAllShops } from "./tenant_resolver.mjs";
+import { formatDisplayOrderId, broadcastProductToChannel } from "./command_handler.mjs";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "./config.mjs";
 
 const dbHdrs = {
@@ -209,8 +209,9 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
     // SUPERPOWER 1: Automatic M-Pesa SMS Reconciler (with Safety Guardrails)
     // =========================================================================
     const mpesa = parseMpesaSms(rawText);
-    if (mpesa && shop) {
-      console.log(`[PASSIVE RECONCILER] Detected M-Pesa SMS in ${shop.name}: Ref ${mpesa.code}, Amount KES ${mpesa.amount}`);
+    if (mpesa) {
+      let activeShop = shop;
+      let candidates = [];
 
       // Guardrail 1A: Deduplication & Single-Use Invariant Check
       const dupRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?mpesa_code=eq.${mpesa.code}&status=eq.paid&select=id,client_name`, { headers: dbHdrs });
@@ -226,12 +227,25 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
         return;
       }
 
-      // Query active pending orders matching this exact amount
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?shop_id=eq.${shop.id}&status=eq.pending&total_price=eq.${mpesa.amount}&order=created_at.desc&limit=5`, { headers: dbHdrs });
-      const candidates = await res.json();
+      if (activeShop) {
+        // Query active pending orders in this shop matching this exact amount
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?shop_id=eq.${activeShop.id}&status=eq.pending&total_price=eq.${mpesa.amount}&order=created_at.desc&limit=5`, { headers: dbHdrs });
+        candidates = await res.json();
+      } else if (context.tier === "DIRECT_MESSAGE") {
+        // Customer in 1-on-1 DM: Query active pending orders matching sender's phone and exact amount
+        const digits = (senderId || "").replace(/[^0-9]/g, "");
+        const searchSuffix = digits.slice(-9);
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?client_phone=ilike.*${searchSuffix}*&status=eq.pending&total_price=eq.${mpesa.amount}&order=created_at.desc&limit=5`, { headers: dbHdrs });
+        candidates = await res.json();
+        if (Array.isArray(candidates) && candidates.length > 0) {
+          const shopId = candidates[0].shop_id;
+          const allShops = await getAllShops();
+          activeShop = allShops.find(s => s.id === shopId) || null;
+        }
+      }
 
-      if (!Array.isArray(candidates) || candidates.length === 0) {
-        console.log(`[PASSIVE RECONCILER] No pending order found matching amount KES ${mpesa.amount} in ${shop.name}`);
+      if (!activeShop || !Array.isArray(candidates) || candidates.length === 0) {
+        console.log(`[PASSIVE RECONCILER] No pending order found matching amount KES ${mpesa.amount}`);
         if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "❓");
         return;
       }
@@ -269,18 +283,29 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
         })
       });
 
-      console.log(`[PASSIVE RECONCILER] Settled Order #${orderToSettle.id.slice(0, 8)} for ${shop.name} with M-Pesa ${mpesa.code}`);
+      console.log(`[PASSIVE RECONCILER] Settled Order #${orderToSettle.id.slice(0, 8)} for ${activeShop.name} with M-Pesa ${mpesa.code}`);
 
       if (safeReactMessage && messageKey) await safeReactMessage(remoteJid, messageKey, "💳");
 
       if (safeSendMessage) {
         await safeSendMessage(remoteJid, {
-          text: `💳 *Payment Auto-Reconciled — ${shop.name}*\n` +
+          text: `💳 *Payment Auto-Reconciled — ${activeShop.name}*\n` +
                 `• Order: *${displayId}* (${orderToSettle.client_name || "Guest Customer"})\n` +
                 `• Ref: \`${mpesa.code}\` | Amount: *KES ${Number(mpesa.amount).toLocaleString()}*\n` +
                 `• Status: *PAID & SETTLED* ✅\n` +
-                `• Next Station: \`!pack ${orderToSettle.id.slice(0, 8)}\``
+                `• Next Station: Sent to Floor Operations for packaging!`
         });
+
+        // Also alert Floor Operations in their group if configured
+        const opsJid = activeShop.fulfillment_settings?.whatsapp_routing?.operations_jid;
+        if (opsJid && opsJid !== remoteJid) {
+          await safeSendMessage(opsJid, {
+            text: `💳 *Order ${displayId} Settled via Customer DM!* (${activeShop.name})\n` +
+                  `• Customer: *${orderToSettle.client_name || "Guest"}*\n` +
+                  `• Amount: *KES ${Number(mpesa.amount).toLocaleString()}* (Ref: \`${mpesa.code}\`)\n` +
+                  `👉 Ready for packaging: \`!pack ${orderToSettle.id.slice(0, 8)}\``
+          });
+        }
       }
       return;
     }
@@ -391,6 +416,9 @@ export async function handlePassiveGroupMessage(rawText, remoteJid, senderId, ms
                       `╰────────────────────────────────────────╯\n` +
                       `_Item is live. To unpublish or hide, reply:_ \`!product hide ${p.id.slice(0, 8)}\``
               });
+
+              // Auto-broadcast new drop to WhatsApp Channel if configured
+              await broadcastProductToChannel(shop, p, safeSendMessage);
             } else {
               await safeSendMessage(remoteJid, {
                 text: `📸 *Studio Preview Generated — ${shop.name}*\n` +

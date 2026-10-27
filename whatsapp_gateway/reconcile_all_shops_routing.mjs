@@ -49,6 +49,7 @@ async function reconcileAllShops() {
     const standardizedRouting = {
       order_prefix: prefix,
       owner_phone: ownerPhone,
+      channel_jid: existingRouting.channel_jid || null,
       community_jid: existingRouting.community_jid || null,
       operations_jid: existingRouting.operations_jid || null,
       management_jid: existingRouting.management_jid || null,
