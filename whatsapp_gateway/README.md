@@ -54,12 +54,20 @@ Groups are partitioned into strict architectural tiers:
 * **Enterprise Prefix:** `!order ORD-DNH-261027-9K4E`
 * **Prefix Spacing Tolerance:** `! order 5b0cd3f1`, `! product`, `! summary`, and `/order` are automatically normalized.
 
-### Ambient "Read & Act" Superpowers
+### Ambient "Read & Act" Superpowers (Protected by 6 Anti-Nonsense Guardrails)
 When staff chat naturally without typing commands, the gateway passively listens:
 1. `💳` **Auto M-Pesa Reconciler:** Forwarded raw Safaricom SMS auto-matches pending order and marks as `PAID`.
 2. `📦` **Passive Order Notes:** Conversational shelf locations (`Order #832f packed on Shelf 2`) saved directly to `orders.notes`.
 3. `🚚` **Rider Assignments:** Staff messages (`James rider taking Westlands for #832f`) update status to `dispatched`.
 4. `📸` **Product Photo Ingestion:** Photos with captions auto-upload to Supabase CDN and create live storefront items.
+
+#### 🛡️ Built-in Anti-Nonsense Guardrails:
+* **Question Filter:** Messages with `?` or inquiry words (`is`, `where`, `why`) never alter order state.
+* **Negation Protection:** *"James is NOT taking order #832f"* blocks courier assignment and flags note with `⚠️`.
+* **Terminal State Lock:** Orders in `delivered`, `cancelled`, or `archived` are immutable.
+* **Unpaid Dispatch Guard:** Blocks handing unpaid orders to couriers; alerts staff with `⚠️`.
+* **Group RBAC:** Customers in Community groups cannot advance warehouse dispatch pipelines; Operations staff photos of waybills are blocked from product cataloging.
+* **M-Pesa Single-Use & Ambiguity Guard:** Duplicates rejected; halts on multiple orders with identical prices to prevent misallocation.
 
 ### Product Catalog & Pricing (Management Only)
 * `!product list [category]` — View active products with short IDs and prices
