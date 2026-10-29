@@ -5,24 +5,25 @@ Ingests store webhooks, coordinates 5-station operational handoffs, and computes
 
 from flask import Blueprint, request, jsonify
 from room_server.models.order import OrderManager
+from room_server.models.pipeline import PipelineManager
 from room_server.services.whatsapp_notifier import dispatch_to_whatsapp_admin
 
 orders_bp = Blueprint("orders_api", __name__, url_prefix="/api/orders")
+
+
+@orders_bp.route("/pipeline/<shop_slug>", methods=["GET"])
+def get_shop_pipeline(shop_slug):
+    """Returns the dynamic station pipeline definition for a specific shop."""
+    pipeline = PipelineManager.get_shop_pipeline(shop_slug)
+    if not pipeline:
+        return jsonify({"error": f"Pipeline configuration for '{shop_slug}' not found"}), 404
+    return jsonify(pipeline)
 
 
 @orders_bp.route("/webhook", methods=["POST"])
 def ingest_order_webhook():
     """
     Webhook receiver for incoming orders from Storefront / POS.
-    Payload:
-    {
-        "customer_name": "Jane Doe",
-        "customer_phone": "+254712345678",
-        "items": [{"name": "Linen Shirt", "qty": 2, "price": 45.0}],
-        "total_amount": 90.0,
-        "currency": "USD",
-        "notes": "Urgent gift packaging"
-    }
     """
     data = request.get_json(silent=True) or {}
     customer_name = data.get("customer_name")
@@ -32,8 +33,9 @@ def ingest_order_webhook():
     items = data.get("items", [])
     total_amount = float(data.get("total_amount", 0.0))
     customer_phone = data.get("customer_phone", "")
-    currency = data.get("currency", "USD")
+    currency = data.get("currency", "KES")
     notes = data.get("notes", "")
+    shop_slug = data.get("shop_slug", "leahs-kitchen")
 
     order = OrderManager.create_order(
         customer_name=customer_name,
@@ -41,7 +43,8 @@ def ingest_order_webhook():
         items=items,
         total_amount=total_amount,
         currency=currency,
-        notes=notes
+        notes=notes,
+        shop_slug=shop_slug
     )
 
     return jsonify({"status": "success", "order": order}), 201
@@ -86,6 +89,32 @@ def advance_order_station(order_id):
         return jsonify({"error": f"Order '{order_id}' not found"}), 404
 
     return jsonify({"status": "success", "order": updated}), 200
+
+
+@orders_bp.route("/<order_id>/confirm-receipt", methods=["POST"])
+def customer_confirm_receipt(order_id):
+    """
+    Called by the customer from the web storefront or WhatsApp to confirm receipt of the delivery.
+    Advances order from DELIVERED to COMPLETED.
+    """
+    order = OrderManager.get_order(order_id)
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    notes = data.get("notes", "Customer confirmed receipt via Storefront tracker")
+
+    try:
+        updated = OrderManager.advance_station(
+            order_id=order_id,
+            new_station="COMPLETED",
+            actor="CUSTOMER",
+            notes=notes
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify({"status": "success", "order": updated, "message": "Delivery confirmed and completed!"}), 200
 
 
 @orders_bp.route("", methods=["GET"])

@@ -1,0 +1,42 @@
+{
+  "shop_slug": "haberdashery",
+  "name": "Digital Nairobi Haberdashery",
+  "currency": "USD",
+  "pipeline": {
+    "initial_station": "PENDING",
+    "stations": [
+      {
+        "id": "PENDING",
+        "label": "Payment Verification",
+        "emoji": "🟡",
+        "action_command": "!paid",
+        "authorized_roles": ["CASHIER", "MANAGEMENT"],
+        "next": "CUTTING"
+      },
+      {
+        "id": "CUTTING",
+        "label": "Fabric Cut & Measure",
+        "emoji": "✂️",
+        "action_command": "!cut",
+        "authorized_roles": ["TAILOR", "PACKAGER"],
+        "next": "PACKAGING"
+      },
+      {
+        "id": "PACKAGING",
+        "label": "Tied & Wrapped",
+        "emoji": "📦",
+        "action_command": "!pack",
+        "authorized_roles": ["PACKAGER"],
+        "next": "DISPATCHED"
+      },
+      {
+        "id": "DISPATCHED",
+        "label": "Rider Dispatched",
+        "emoji": "🚚",
+        "action_command": "!dispatch",
+        "authorized_roles": ["COURIER"],
+        "next": "COMPLETED"
+      }
+    ]
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "shop_slug": "leahs-kitchen",
+  "name": "Leah's Kitchen",
+  "currency": "KES",
+  "pipeline": {
+    "initial_station": "PENDING",
+    "stations": [
+      {
+        "id": "PENDING",
+        "label": "Awaiting M-Pesa",
+        "emoji": "🟡",
+        "action_command": "!paid",
+        "authorized_roles": ["CASHIER", "MANAGEMENT"],
+        "next": "COOKING"
+      },
+      {
+        "id": "COOKING",
+        "label": "Kitchen Prep",
+        "emoji": "🍳",
+        "action_command": "!cook",
+        "authorized_roles": ["KITCHEN_CHEF"],
+        "next": "PACKAGING"
+      },
+      {
+        "id": "PACKAGING",
+        "label": "Tamper-Proof Boxed",
+        "emoji": "📦",
+        "action_command": "!pack",
+        "authorized_roles": ["PACKAGER"],
+        "next": "READY"
+      },
+      {
+        "id": "READY",
+        "label": "At Pickup Counter",
+        "emoji": "🥡",
+        "action_command": "!dispatch",
+        "authorized_roles": ["COURIER", "COUNTER_STAFF"],
+        "next": "IN_TRANSIT"
+      },
+      {
+        "id": "IN_TRANSIT",
+        "label": "Out for Delivery",
+        "emoji": "🚚",
+        "action_command": "!delivered",
+        "authorized_roles": ["COURIER", "MANAGEMENT"],
+        "next": "DELIVERED"
+      },
+      {
+        "id": "DELIVERED",
+        "label": "Awaiting Customer Confirmation",
+        "emoji": "📍",
+        "action_command": "!confirm",
+        "authorized_roles": ["CUSTOMER", "COUNTER_STAFF", "MANAGEMENT"],
+        "next": "COMPLETED"
+      }
+    ]
+  }
+}

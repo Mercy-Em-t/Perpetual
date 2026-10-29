@@ -4,6 +4,7 @@
  */
 import { parseJsonBody } from "./http_helpers.mjs";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "./config.mjs";
+import { getAllShops } from "./tenant_resolver.mjs";
 
 export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSendMessage, getSock }) {
   return async function handleHttpRequest(req, res) {
@@ -65,6 +66,175 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
         return res.end(JSON.stringify({ success: true, group: result }));
       } catch (err) {
         console.error("[GROUP CREATE ERROR]", err);
+        res.writeHead(500);
+        return res.end(JSON.stringify({ error: err.message }));
+      }
+    }
+
+    // POST /api/shops/provision
+    if (req.method === "POST" && parsedUrl.pathname === "/api/shops/provision") {
+      try {
+        const sock = getSock ? getSock() : null;
+        const body = await parseJsonBody(req);
+        const { name, slug, phone, owner_phone, currency = "KES", pipeline_type = "kitchen" } = body;
+
+        if (!name || !slug) {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: "Missing required fields: 'name' and 'slug'" }));
+        }
+
+        const contactPhone = owner_phone || phone || "";
+        let participantJid = null;
+        if (contactPhone) {
+          const digits = contactPhone.replace(/\D/g, "");
+          const cleanDigits = digits.startsWith("0") ? `254${digits.slice(1)}` : digits;
+          if (cleanDigits.length >= 9) {
+            participantJid = `${cleanDigits}@s.whatsapp.net`;
+          }
+        }
+        const participants = participantJid ? [participantJid] : [];
+
+        // 1. Check or Insert Shop in Supabase
+        let shopRecord = null;
+        const existingRes = await fetch(`${SUPABASE_URL}/rest/v1/shops?slug=eq.${slug}&select=*`, {
+          headers: {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            "Content-Type": "application/json"
+          }
+        });
+        const existing = await existingRes.json();
+        if (Array.isArray(existing) && existing.length > 0) {
+          shopRecord = existing[0];
+        } else {
+          const createRes = await fetch(`${SUPABASE_URL}/rest/v1/shops`, {
+            method: "POST",
+            headers: {
+              "apikey": SUPABASE_SERVICE_ROLE_KEY,
+              "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              "Content-Type": "application/json",
+              "Prefer": "return=representation"
+            },
+            body: JSON.stringify({
+              name,
+              slug,
+              phone: contactPhone,
+              whatsapp_number: contactPhone,
+              fulfillment_settings: {
+                pipeline_type,
+                currency
+              }
+            })
+          });
+          const created = await createRes.json();
+          shopRecord = Array.isArray(created) ? created[0] : created;
+        }
+
+        // 2. Create WhatsApp Groups via Baileys if socket is active
+        let operationsGroup = null;
+        let managementGroup = null;
+        let operationsInvite = null;
+        let managementInvite = null;
+
+        if (sock) {
+          try {
+            // Floor Operations Group
+            operationsGroup = await sock.groupCreate(`${name} - Operations`, participants);
+            try {
+              const code = await sock.groupInviteCode(operationsGroup.id);
+              operationsInvite = `https://chat.whatsapp.com/${code}`;
+            } catch (e) {
+              console.warn("[PROVISION] Could not get operations invite code:", e.message);
+            }
+
+            // Management Group
+            managementGroup = await sock.groupCreate(`${name} - Management`, participants);
+            try {
+              const code = await sock.groupInviteCode(managementGroup.id);
+              managementInvite = `https://chat.whatsapp.com/${code}`;
+            } catch (e) {
+              console.warn("[PROVISION] Could not get management invite code:", e.message);
+            }
+
+            // Send welcoming card to Operations group
+            await safeSendMessage(operationsGroup.id, {
+              text: `🏬 *Welcome to ${name} — Operations Hub!*\n\n` +
+                    `This channel coordinates real-time order fulfillments and kitchen stations.\n\n` +
+                    `*Staff Commands:*\n` +
+                    `• *!orders* — View active order pipeline\n` +
+                    `• *!paid <order_id> <ref>* — Confirm payment\n` +
+                    `• *!cook <order_id>* — Mark cooking finished\n` +
+                    `• *!pack <order_id>* — Box goods & food\n` +
+                    `• *!dispatch <order_id> <rider>* — Hand off to courier\n\n` +
+                    `_Live connected to TMS Whitelabel platform._`
+            });
+
+            // Send welcoming card to Management group
+            await safeSendMessage(managementGroup.id, {
+              text: `💼 *Welcome to ${name} — Management Oversight!*\n\n` +
+                    `This channel receives daily sales pulses, executive summaries, and P&L rollups.\n\n` +
+                    `*Manager Commands:*\n` +
+                    `• *!summary* — Gross revenue & order counts\n` +
+                    `• *!status* — Open orders & till status\n` +
+                    `• *!product add* — Add new catalog product\n\n` +
+                    `_All updates publish live to your TMS Storefront._`
+            });
+          } catch (grpErr) {
+            console.error("[PROVISION] Error creating WhatsApp groups:", grpErr.message);
+          }
+        }
+
+        // 3. Update Supabase Shop with WhatsApp Routing
+        const currentSettings = shopRecord.fulfillment_settings || {};
+        const updatedSettings = {
+          ...currentSettings,
+          whatsapp_routing: {
+            ...(currentSettings.whatsapp_routing || {}),
+            operations_jid: operationsGroup ? operationsGroup.id : (currentSettings.whatsapp_routing?.operations_jid || null),
+            operations_invite: operationsInvite || (currentSettings.whatsapp_routing?.operations_invite || null),
+            management_jid: managementGroup ? managementGroup.id : (currentSettings.whatsapp_routing?.management_jid || null),
+            management_invite: managementInvite || (currentSettings.whatsapp_routing?.management_invite || null)
+          }
+        };
+
+        if (shopRecord.id) {
+          await fetch(`${SUPABASE_URL}/rest/v1/shops?id=eq.${shopRecord.id}`, {
+            method: "PATCH",
+            headers: {
+              "apikey": SUPABASE_SERVICE_ROLE_KEY,
+              "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              fulfillment_settings: updatedSettings
+            })
+          });
+        }
+
+        // Invalidate cache
+        await getAllShops(true);
+
+        res.writeHead(200);
+        return res.end(JSON.stringify({
+          success: true,
+          shop: {
+            id: shopRecord.id,
+            name: shopRecord.name || name,
+            slug: shopRecord.slug || slug
+          },
+          whatsapp: {
+            operations: {
+              jid: operationsGroup ? operationsGroup.id : null,
+              invite_url: operationsInvite
+            },
+            management: {
+              jid: managementGroup ? managementGroup.id : null,
+              invite_url: managementInvite
+            }
+          }
+        }));
+      } catch (err) {
+        console.error("[SHOP PROVISION ERROR]", err);
         res.writeHead(500);
         return res.end(JSON.stringify({ error: err.message }));
       }

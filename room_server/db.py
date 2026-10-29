@@ -111,16 +111,17 @@ class Database:
             )
             """)
 
-            # Store Orders across the 5 Operational Stations
+            # Store Orders across Dynamic Operational Stations
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS orders (
                 order_id TEXT PRIMARY KEY,
+                shop_slug TEXT NOT NULL DEFAULT 'leahs-kitchen',
                 customer_name TEXT NOT NULL,
                 customer_phone TEXT DEFAULT '',
                 items TEXT NOT NULL DEFAULT '[]',
                 total_amount REAL NOT NULL DEFAULT 0.0,
-                currency TEXT NOT NULL DEFAULT 'USD',
-                station TEXT NOT NULL DEFAULT 'PENDING' CHECK(station IN ('PENDING', 'PAID', 'PACKAGING', 'VERIFIED', 'DISPATCHED', 'CANCELLED')),
+                currency TEXT NOT NULL DEFAULT 'KES',
+                station TEXT NOT NULL DEFAULT 'PENDING',
                 payment_ref TEXT DEFAULT '',
                 courier_name TEXT DEFAULT '',
                 notes TEXT DEFAULT '',
@@ -128,6 +129,44 @@ class Database:
                 updated_at REAL NOT NULL
             )
             """)
+
+            # Safe migration: ensure shop_slug exists and remove old rigid CHECK constraint
+            cursor.execute("PRAGMA table_info(orders)")
+            cols = [r["name"] for r in cursor.fetchall()]
+            if "shop_slug" not in cols:
+                cursor.execute("ALTER TABLE orders ADD COLUMN shop_slug TEXT DEFAULT 'leahs-kitchen'")
+
+            cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='orders'")
+            row = cursor.fetchone()
+            if row and "CHECK(station IN" in (row[0] or ""):
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS orders_migration_temp (
+                    order_id TEXT PRIMARY KEY,
+                    shop_slug TEXT NOT NULL DEFAULT 'leahs-kitchen',
+                    customer_name TEXT NOT NULL,
+                    customer_phone TEXT DEFAULT '',
+                    items TEXT NOT NULL DEFAULT '[]',
+                    total_amount REAL NOT NULL DEFAULT 0.0,
+                    currency TEXT NOT NULL DEFAULT 'KES',
+                    station TEXT NOT NULL DEFAULT 'PENDING',
+                    payment_ref TEXT DEFAULT '',
+                    courier_name TEXT DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+                """)
+                cursor.execute("""
+                INSERT OR IGNORE INTO orders_migration_temp (
+                    order_id, shop_slug, customer_name, customer_phone, items,
+                    total_amount, currency, station, payment_ref, courier_name, notes, created_at, updated_at
+                )
+                SELECT order_id, COALESCE(shop_slug, 'leahs-kitchen'), customer_name, customer_phone, items,
+                       total_amount, currency, station, payment_ref, courier_name, notes, created_at, updated_at
+                FROM orders
+                """)
+                cursor.execute("DROP TABLE orders")
+                cursor.execute("ALTER TABLE orders_migration_temp RENAME TO orders")
 
             conn.commit()
             conn.close()

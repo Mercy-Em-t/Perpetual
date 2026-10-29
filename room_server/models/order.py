@@ -10,6 +10,7 @@ import uuid
 from typing import Dict, Any, List, Optional
 from room_server.db import db
 from room_server.models.message import MessageBroker
+from room_server.models.pipeline import PipelineManager
 from room_server.services.whatsapp_notifier import dispatch_to_whatsapp_general, dispatch_to_whatsapp_admin
 
 
@@ -40,24 +41,26 @@ class OrderManager:
         items: List[Dict[str, Any]],
         total_amount: float,
         customer_phone: str = "",
-        currency: str = "USD",
-        notes: str = ""
+        currency: str = "KES",
+        notes: str = "",
+        shop_slug: str = "leahs-kitchen"
     ) -> Dict[str, Any]:
-        """Creates a new incoming order in PENDING station and notifies Floor Ops."""
+        """Creates a new incoming order in the initial station and notifies Floor Ops."""
         order_id = f"ORD-{uuid.uuid4().hex[:6].upper()}"
         now = time.time()
         items_json = json.dumps(items)
+        initial_station = PipelineManager.get_initial_station(shop_slug)
 
         with db._lock:
             conn = db.get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO orders (
-                    order_id, customer_name, customer_phone, items,
+                    order_id, shop_slug, customer_name, customer_phone, items,
                     total_amount, currency, station, payment_ref, courier_name,
                     notes, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', '', '', ?, ?, ?)
-            """, (order_id, customer_name, customer_phone, items_json, total_amount, currency, notes, now, now))
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?)
+            """, (order_id, shop_slug, customer_name, customer_phone, items_json, total_amount, currency, initial_station, notes, now, now))
             conn.commit()
             conn.close()
 
@@ -68,6 +71,7 @@ class OrderManager:
             topic="ORDER_CREATED",
             payload={
                 "order_id": order_id,
+                "shop_slug": shop_slug,
                 "customer_name": customer_name,
                 "total_amount": total_amount,
                 "currency": currency,
@@ -80,16 +84,21 @@ class OrderManager:
         if len(items) > 3:
             item_summary += f" +{len(items)-3} more"
 
+        st_info = PipelineManager.get_station_info(shop_slug, initial_station) or {}
+        st_emoji = st_info.get("emoji", "🟡")
+        st_label = st_info.get("label", "PENDING PAYMENT")
+        st_cmd = st_info.get("action_command", "!paid")
+
         ops_card = (
-            f"🛒 *[NEW ORDER]* `{order_id}`\n"
+            f"🛒 *[NEW ORDER]* `{order_id}` ({shop_slug})\n"
             f"╭────────────────────────────────╮\n"
             f"  • Customer: {customer_name}\n"
             f"  • Items: {item_summary}\n"
             f"  • Total: {currency} {total_amount:,.2f}\n"
-            f"  • Station: 🟡 PENDING PAYMENT\n"
-            f"  • Next Step: Cashier verify payment\n"
+            f"  • Station: {st_emoji} {st_label}\n"
+            f"  • Next Step: Action via `{st_cmd}`\n"
             f"╰────────────────────────────────╯\n"
-            f"_Reply:_ `!paid {order_id} <reference>`"
+            f"_Reply:_ `{st_cmd} {order_id} <reference>`"
         )
         dispatch_to_whatsapp_general(ops_card)
 
@@ -122,13 +131,17 @@ class OrderManager:
         courier_name: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """Advances an order through the 5-station operational line."""
-        new_station = new_station.upper()
-        if new_station not in OrderManager.VALID_STATIONS:
-            raise ValueError(f"Invalid station '{new_station}'. Must be one of {OrderManager.VALID_STATIONS}")
-
         current = OrderManager.get_order(order_id)
         if not current:
             return None
+
+        new_station = new_station.upper()
+        shop_slug = current.get("shop_slug", "leahs-kitchen")
+        station_info = PipelineManager.get_station_info(shop_slug, new_station)
+
+        # Allow if registered in tenant pipeline or in fallback VALID_STATIONS
+        if not station_info and new_station not in OrderManager.VALID_STATIONS and new_station != "COMPLETED":
+            raise ValueError(f"Invalid station '{new_station}' for shop '{shop_slug}'.")
 
         now = time.time()
         updates = ["station = ?", "updated_at = ?"]
@@ -171,8 +184,14 @@ class OrderManager:
             }
         )
 
-        emoji = OrderManager.STATION_EMOJIS.get(new_station, "🔹")
-        next_step = OrderManager.STATION_NEXT_ACTIONS.get(new_station, "Proceed with pipeline.")
+        if station_info:
+            emoji = station_info.get("emoji", "🔹")
+            cmd = station_info.get("action_command", "!action")
+            next_st = station_info.get("next")
+            next_step = f"Advance to {next_st} via '{cmd}'" if next_st else "Order fulfilled."
+        else:
+            emoji = OrderManager.STATION_EMOJIS.get(new_station, "🔹")
+            next_step = OrderManager.STATION_NEXT_ACTIONS.get(new_station, "Proceed with pipeline.")
 
         # Dispatch station handoff card to Operations Group
         ops_msg = (

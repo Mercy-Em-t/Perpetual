@@ -1,0 +1,42 @@
+{
+  "shop_slug": "creative-gales",
+  "name": "Creative Gales",
+  "currency": "USD",
+  "pipeline": {
+    "initial_station": "PENDING",
+    "stations": [
+      {
+        "id": "PENDING",
+        "label": "Pending Payment",
+        "emoji": "🟡",
+        "action_command": "!paid",
+        "authorized_roles": ["CASHIER", "MANAGEMENT"],
+        "next": "PACKAGING"
+      },
+      {
+        "id": "PACKAGING",
+        "label": "Artisan Boxing",
+        "emoji": "📦",
+        "action_command": "!pack",
+        "authorized_roles": ["PACKAGER"],
+        "next": "VERIFIED"
+      },
+      {
+        "id": "VERIFIED",
+        "label": "QA Approved",
+        "emoji": "🔍",
+        "action_command": "!verify",
+        "authorized_roles": ["QA_INSPECTOR"],
+        "next": "DISPATCHED"
+      },
+      {
+        "id": "DISPATCHED",
+        "label": "Shipped",
+        "emoji": "🚚",
+        "action_command": "!dispatch",
+        "authorized_roles": ["COURIER"],
+        "next": "COMPLETED"
+      }
+    ]
+  }
+}

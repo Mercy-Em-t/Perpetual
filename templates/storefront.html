@@ -267,12 +267,25 @@
         <p style="font-size:0.85rem;color:var(--text-muted);margin:0.5rem 0;">
           A real-time handoff card was just transmitted into the <b>perpetua</b> WhatsApp Floor Operations channel. Floor workers can now advance it with <code style="color:var(--accent-cyan);">!paid &lt;order_id&gt;</code>.
         </p>
-        <div class="station-stepper">
+        <div class="station-stepper" id="station-stepper">
+          <!-- Dynamically populated from /api/orders/pipeline/<shop_slug> -->
           <div class="step-node active" id="st-pending">🟡 PENDING</div>
-          <div class="step-node" id="st-paid">💳 PAID</div>
-          <div class="step-node" id="st-pack">📦 PACKAGING</div>
-          <div class="step-node" id="st-verify">🔍 VERIFIED</div>
-          <div class="step-node" id="st-dispatch">🚚 DISPATCHED</div>
+          <div class="step-node" id="st-cooking">🍳 COOKING</div>
+          <div class="step-node" id="st-packaging">📦 PACKAGING</div>
+          <div class="step-node" id="st-ready">🥡 READY</div>
+        </div>
+
+        <!-- Customer Proof-of-Delivery Confirmation Container -->
+        <div id="customer-confirm-container" style="display:none;margin-top:1.25rem;padding:1rem;background:rgba(16,185,129,0.15);border:1px solid var(--accent-green);border-radius:var(--radius-sm);text-align:center;">
+          <p style="margin:0 0 0.75rem 0;font-size:0.9rem;color:var(--text-main);font-weight:600;">
+            📍 Rider has arrived! Please confirm you have received your package/meal:
+          </p>
+          <button id="btn-customer-confirm" onclick="confirmOrderReceipt()" style="background:var(--accent-green);color:#0d1117;border:none;padding:0.6rem 1.5rem;font-weight:700;border-radius:var(--radius-sm);cursor:pointer;font-size:0.95rem;box-shadow:0 2px 8px rgba(16,185,129,0.4);">
+            ✅ Confirm Receipt — I Received My Order
+          </button>
+        </div>
+        <div id="order-completed-celebration" style="display:none;margin-top:1rem;padding:0.75rem;background:var(--surface-raised);border-radius:var(--radius-sm);text-align:center;color:var(--accent-cyan);font-weight:600;font-size:0.9rem;">
+          🎉 Delivery Complete & Confirmed! Thank you for ordering with us.
         </div>
       </div>
     </div>
@@ -312,8 +325,39 @@
       }
     };
 
+    const BRAND_SLUG_MAP = {
+      gales: "creative-gales",
+      haberdashery: "haberdashery",
+      kitchen: "leahs-kitchen"
+    };
+
     let activeBrand = "gales";
     let cart = [];
+    let currentPipelineStations = [];
+
+    async function loadShopPipeline(brandKey) {
+      const slug = BRAND_SLUG_MAP[brandKey] || "leahs-kitchen";
+      try {
+        const res = await fetch(`/api/orders/pipeline/${slug}`);
+        if (res.ok) {
+          const data = await res.json();
+          currentPipelineStations = data.pipeline?.stations || [];
+          renderDynamicStepper(currentPipelineStations);
+        }
+      } catch (e) {
+        console.warn("Could not load dynamic pipeline:", e);
+      }
+    }
+
+    function renderDynamicStepper(stations) {
+      const stepper = document.getElementById("station-stepper");
+      if (!stepper || !stations || stations.length === 0) return;
+      stepper.innerHTML = stations.map((s, idx) => `
+        <div class="step-node ${idx === 0 ? 'active' : ''}" id="st-${s.id.toLowerCase()}">
+          ${s.emoji || '🔹'} ${s.label || s.id}
+        </div>
+      `).join("");
+    }
 
     function switchBrand(brandKey) {
       activeBrand = brandKey;
@@ -325,6 +369,7 @@
       document.getElementById("kitchen-cutoff-notice").style.display = brandKey === 'kitchen' ? 'block' : 'none';
       updateCartUI();
       renderCatalog();
+      loadShopPipeline(brandKey);
     }
 
     function renderCatalog() {
@@ -394,6 +439,7 @@
       const data = CATALOGS[activeBrand];
 
       const payload = {
+        shop_slug: BRAND_SLUG_MAP[activeBrand] || "leahs-kitchen",
         customer_name: custName,
         customer_phone: custPhone,
         items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.price })),
@@ -443,18 +489,62 @@
           const ord = data.order;
           if (!ord) return;
 
-          const st = ord.station;
+          const st = (ord.station || "").toLowerCase();
           document.querySelectorAll(".step-node").forEach(n => n.classList.remove("active"));
-          if (st === "PENDING") document.getElementById("st-pending").classList.add("active");
-          if (st === "PAID") document.getElementById("st-paid").classList.add("active");
-          if (st === "PACKAGING") document.getElementById("st-pack").classList.add("active");
-          if (st === "VERIFIED") document.getElementById("st-verify").classList.add("active");
-          if (st === "DISPATCHED") {
-            document.getElementById("st-dispatch").classList.add("active");
+          const activeNode = document.getElementById(`st-${st}`);
+          if (activeNode) {
+            activeNode.classList.add("active");
+          }
+
+          // Show customer confirmation button when rider marks delivered
+          const confirmBox = document.getElementById("customer-confirm-container");
+          const celebBox = document.getElementById("order-completed-celebration");
+
+          if (st === "delivered") {
+            if (confirmBox) confirmBox.style.display = "block";
+          } else if (st === "completed") {
+            if (confirmBox) confirmBox.style.display = "none";
+            if (celebBox) celebBox.style.display = "block";
+            clearInterval(interval);
+          } else if (st === "cancelled") {
             clearInterval(interval);
           }
         } catch { }
-      }, 3000);
+      }, 2500);
+    }
+
+    async function confirmOrderReceipt() {
+      const orderId = document.getElementById("active-order-id").textContent;
+      if (!orderId || orderId === "--") return;
+      const btn = document.getElementById("btn-customer-confirm");
+      btn.disabled = true;
+      btn.textContent = "Confirming Receipt...";
+
+      try {
+        const res = await fetch(`/api/orders/${orderId}/confirm-receipt`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notes: "Customer confirmed physical receipt via Storefront tracker." })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          const confirmBox = document.getElementById("customer-confirm-container");
+          const celebBox = document.getElementById("order-completed-celebration");
+          if (confirmBox) confirmBox.style.display = "none";
+          if (celebBox) celebBox.style.display = "block";
+          document.querySelectorAll(".step-node").forEach(n => n.classList.remove("active"));
+          const compNode = document.getElementById("st-completed");
+          if (compNode) compNode.classList.add("active");
+        } else {
+          alert("Could not confirm receipt: " + (data.error || "Unknown"));
+          btn.disabled = false;
+          btn.textContent = "✅ Confirm Receipt — I Received My Order";
+        }
+      } catch (err) {
+        alert("Network error: " + err.message);
+        btn.disabled = false;
+        btn.textContent = "✅ Confirm Receipt — I Received My Order";
+      }
     }
 
     function quickFillCart() {
@@ -469,6 +559,7 @@
 
     // Initialize
     renderCatalog();
+    loadShopPipeline("gales");
   </script>
 </body>
 </html>
