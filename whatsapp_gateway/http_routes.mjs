@@ -184,16 +184,56 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
           }
         }
 
-        // 3. Update Supabase Shop with WhatsApp Routing
+        // 3. Update Supabase Shop with Complete Self-Contained Configuration & WhatsApp Routing
         const currentSettings = shopRecord.fulfillment_settings || {};
+        const isFoodPipeline = pipeline_type === "kitchen" || body.industry_type === "food" || body.industry_type === "restaurant";
+        const defaultStations = isFoodPipeline
+          ? [
+              { id: "pending_payment", label: "Awaiting Payment", icon: "⏳", notify_customer: false, notify_ops: true, command_triggers: [] },
+              { id: "confirmed", label: "Order Confirmed", icon: "✅", notify_customer: true, notify_ops: true, command_triggers: ["!paid", "!confirm"] },
+              { id: "cooking", label: "In Kitchen", icon: "🍳", notify_customer: true, notify_ops: false, command_triggers: ["!cook", "!prep", "!kitchen"] },
+              { id: "packed", label: "Packed & Boxed", icon: "🥡", notify_customer: true, notify_ops: true, command_triggers: ["!pack", "!ready"] },
+              { id: "out_for_delivery", label: "Out for Delivery", icon: "🛵", notify_customer: true, notify_ops: true, command_triggers: ["!dispatch", "!deliver"] },
+              { id: "completed", label: "Delivered", icon: "🎉", notify_customer: true, notify_ops: false, command_triggers: ["!done", "!complete"] }
+            ]
+          : [
+              { id: "pending_payment", label: "Awaiting Payment", icon: "⏳", notify_customer: false, notify_ops: true, command_triggers: [] },
+              { id: "confirmed", label: "Order Confirmed", icon: "✅", notify_customer: true, notify_ops: true, command_triggers: ["!paid", "!confirm"] },
+              { id: "picking", label: "Picking Items", icon: "🪡", notify_customer: true, notify_ops: false, command_triggers: ["!pick", "!prepare"] },
+              { id: "packed", label: "Packed & Boxed", icon: "📦", notify_customer: true, notify_ops: true, command_triggers: ["!pack", "!ready"] },
+              { id: "dispatched", label: "Out for Delivery", icon: "🛵", notify_customer: true, notify_ops: true, command_triggers: ["!dispatch", "!deliver"] },
+              { id: "completed", label: "Delivered", icon: "🎉", notify_customer: true, notify_ops: false, command_triggers: ["!done", "!complete"] }
+            ];
+
+        const orderPrefix = body.order_prefix || currentSettings.whatsapp_routing?.order_prefix || slug.replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "TMS";
+        const isPreorder = Boolean(body.is_preorder ?? currentSettings.is_preorder ?? false);
+        const pickupPoints = Array.isArray(body.pickup_points)
+          ? body.pickup_points
+          : (Array.isArray(currentSettings.pickup_points) ? currentSettings.pickup_points : []);
+
         const updatedSettings = {
           ...currentSettings,
+          currency,
+          pipeline_type,
+          is_preorder: isPreorder,
+          preorder_mode: isPreorder,
+          cutoff_time: body.cutoff_time || currentSettings.cutoff_time || (isPreorder ? "17:00" : null),
+          accepts_pickup: body.accepts_pickup ?? currentSettings.accepts_pickup ?? true,
+          accepts_delivery: body.accepts_delivery ?? currentSettings.accepts_delivery ?? true,
+          accepts_dine_in: body.accepts_dine_in ?? currentSettings.accepts_dine_in ?? isFoodPipeline,
+          accepts_pickup_point: body.accepts_pickup_point ?? currentSettings.accepts_pickup_point ?? (pickupPoints.length > 0),
+          pickup_points: pickupPoints,
+          pipeline_stations: (Array.isArray(currentSettings.pipeline_stations) && currentSettings.pipeline_stations.length > 0)
+            ? currentSettings.pipeline_stations
+            : defaultStations,
           whatsapp_routing: {
             ...(currentSettings.whatsapp_routing || {}),
-            operations_jid: operationsGroup ? operationsGroup.id : (currentSettings.whatsapp_routing?.operations_jid || null),
+            order_prefix: orderPrefix,
+            operations_jid: operationsGroup ? operationsGroup.id : (body.operations_jid || currentSettings.whatsapp_routing?.operations_jid || null),
             operations_invite: operationsInvite || (currentSettings.whatsapp_routing?.operations_invite || null),
-            management_jid: managementGroup ? managementGroup.id : (currentSettings.whatsapp_routing?.management_jid || null),
-            management_invite: managementInvite || (currentSettings.whatsapp_routing?.management_invite || null)
+            management_jid: managementGroup ? managementGroup.id : (body.management_jid || currentSettings.whatsapp_routing?.management_jid || null),
+            management_invite: managementInvite || (currentSettings.whatsapp_routing?.management_invite || null),
+            community_jid: body.community_jid || currentSettings.whatsapp_routing?.community_jid || null
           }
         };
 
@@ -206,9 +246,50 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              fulfillment_settings: updatedSettings
+              fulfillment_settings: updatedSettings,
+              mpesa_till_number: body.mpesa_till_number || shopRecord.mpesa_till_number || "5758419"
             })
           });
+        }
+
+        // 4. Write local config/shops/<slug>.json so room_server (:5050) has immediate pipeline parity
+        try {
+          const fsMod = await import("fs");
+          const pathMod = await import("path");
+          const configDir = pathMod.resolve(process.cwd(), "..", "config", "shops");
+          if (fsMod.existsSync(configDir)) {
+            const localShopJson = {
+              shop_id: shopRecord.id,
+              shop_slug: slug,
+              shop_name: name,
+              order_prefix: orderPrefix,
+              brand: {
+                tagline: shopRecord.tagline || `${name} Storefront`,
+                currency,
+                support_phone: contactPhone,
+                mpesa_till: body.mpesa_till_number || shopRecord.mpesa_till_number || "5758419"
+              },
+              whatsapp_groups: {
+                operations_jid: updatedSettings.whatsapp_routing.operations_jid,
+                admin_oversight_jid: updatedSettings.whatsapp_routing.management_jid,
+                community_jid: updatedSettings.whatsapp_routing.community_jid
+              },
+              fulfillment: {
+                accepts_pickup: updatedSettings.accepts_pickup,
+                accepts_delivery: updatedSettings.accepts_delivery,
+                accepts_dine_in: updatedSettings.accepts_dine_in,
+                accepts_pickup_point: updatedSettings.accepts_pickup_point,
+                pickup_points: updatedSettings.pickup_points,
+                preorder_cutoff_hour: updatedSettings.is_preorder ? 17 : null
+              },
+              pipeline: {
+                stations: updatedSettings.pipeline_stations
+              }
+            };
+            fsMod.writeFileSync(pathMod.join(configDir, `${slug}.json`), JSON.stringify(localShopJson, null, 2), "utf-8");
+          }
+        } catch (cfgErr) {
+          console.warn("[PROVISION] Local config sync warning:", cfgErr.message);
         }
 
         // Invalidate cache
