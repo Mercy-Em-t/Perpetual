@@ -414,7 +414,8 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
                 items: items.map(i => ({ name: i.name, qty: i.quantity || i.qty || 1, price: i.price || 0 })),
                 total_amount: total,
                 currency: "KES",
-                notes: `[${matchedShop?.name || shopTitle}] Pickup: ${pickup}`
+                notes: `[${matchedShop?.name || shopTitle}] Pickup: ${pickup}`,
+                skip_whatsapp_notify: true
               })
             });
           });
@@ -457,8 +458,9 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
     if (req.method === "POST" && (parsedUrl.pathname === "/api/order/verify-payment" || parsedUrl.pathname === "/api/v1/orders/verify-payment")) {
       try {
         const body = await parseJsonBody(req);
-        const { orderId, code, amount, customer, items, targetGroupJid } = body;
-        console.log(`[PAYMENT VERIFICATION] Order ${orderId} | Code ${code} | KES ${amount}`);
+        const { orderId, supabaseId, tenantId, shopName, code, amount, customer, items, targetGroupJid } = body;
+        const primaryId = supabaseId || orderId;
+        console.log(`[PAYMENT VERIFICATION] Order ${orderId} (DB: ${primaryId}) | Code ${code} | KES ${amount}`);
 
         // SUPABASE_URL imported from config.mjs
         const SERVICE_KEY = SUPABASE_SERVICE_ROLE_KEY;
@@ -474,12 +476,14 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
         }
 
         // 2. Single-Use M-Pesa Deduplication Guarantee (Stage 3 Invariant)
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId);
+        const isPrimaryUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(primaryId || "");
         const dupRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?mpesa_code=eq.${cleanCode}&status=eq.paid&select=id,notes`, {
           headers: { "apikey": SERVICE_KEY, "Authorization": `Bearer ${SERVICE_KEY}` }
         });
         const existingPaid = await dupRes.json();
-        const conflict = (existingPaid || []).filter(o => isUUID ? o.id !== orderId : o.notes !== orderId);
+        const conflict = (existingPaid || []).filter(o =>
+          (isPrimaryUUID && o.id !== primaryId) || (!isPrimaryUUID && o.notes !== orderId && o.id !== orderId)
+        );
         if (conflict.length > 0) {
           res.writeHead(409);
           return res.end(JSON.stringify({
@@ -488,10 +492,29 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
           }));
         }
 
-        // 3. Authoritative Backend Settlement: Mark order as PAID in Supabase
-        if (orderId) {
+        // 3. Resolve Shop & WhatsApp Routing
+        let matchedShop = null;
+        try {
+          const allShops = await getAllShops();
+          const qSlug = (tenantId || body.shopSlug || "").toLowerCase().trim();
+          const qName = (shopName || "").toLowerCase().trim();
+          matchedShop = allShops.find(s =>
+            (qSlug && s.slug?.toLowerCase() === qSlug) ||
+            (qName && s.name?.toLowerCase() === qName) ||
+            (orderId && String(orderId).toUpperCase().includes(s.fulfillment_settings?.whatsapp_routing?.order_prefix || "__NONE__")) ||
+            s.fulfillment_settings?.whatsapp_routing?.operations_jid === targetGroupJid ||
+            s.fulfillment_settings?.whatsapp_routing?.community_jid === targetGroupJid
+          ) || null;
+        } catch (e) {}
+
+        // 4. Authoritative Backend Settlement: Mark order as PAID in Supabase
+        if (primaryId) {
           try {
-            const filter = isUUID ? `id=eq.${orderId}` : `notes=eq.${orderId}`;
+            const filter = isPrimaryUUID ? `id=eq.${primaryId}` : `notes=eq.${orderId}`;
+            const patchPayload = { status: "paid", mpesa_code: cleanCode };
+            if (orderId && !/^[0-9a-f-]{36}$/i.test(orderId)) {
+              patchPayload.notes = orderId;
+            }
             await fetch(`${SUPABASE_URL}/rest/v1/orders?${filter}`, {
               method: "PATCH",
               headers: {
@@ -499,44 +522,62 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
                 "Authorization": `Bearer ${SERVICE_KEY}`,
                 "Content-Type": "application/json"
               },
-              body: JSON.stringify({ status: "paid", mpesa_code: cleanCode })
+              body: JSON.stringify(patchPayload)
             });
-            console.log(`[BACKEND SETTLEMENT] Order ${orderId} successfully promoted to PAID in Supabase via filter ${filter}.`);
+            console.log(`[BACKEND SETTLEMENT] Order ${primaryId} (${orderId}) promoted to PAID in Supabase.`);
           } catch (dbErr) {
             console.error("[BACKEND DB ERROR]", dbErr.message);
           }
         }
 
-        // Broadcast verification notice to BOTH Floor Ops and Shop-Specific WhatsApp Group
-        if (safeSendMessage) {
-          const itemSummary = Array.isArray(items) ? items.map(i => `${i.quantity}x ${i.name}`).join(", ") : "Items";
-          const custName = customer?.name || "Customer";
-          const verifyCard =
-            `💰 *M-PESA PAYMENT VERIFIED*\n\n` +
-            `• *Order:* #${(orderId || "").slice(0, 8)}\n` +
-            `• *Customer:* ${custName}\n` +
-            `• *Amount:* KES ${amount}\n` +
-            `• *M-Pesa Ref:* ${code || "PENDING"}\n` +
-            `• *Items:* ${itemSummary}\n\n` +
-            `_Auto-paired via Edge Reconciliation Engine._`;
+        // 5. Sync with Perpetual Core (:5050) without triggering duplicate WhatsApp messages
+        const resolvedShopSlug = matchedShop?.slug || tenantId || "creative-galore";
+        const custName = customer?.name || "Customer";
+        const custPhone = customer?.phone || "";
+        const pickup = customer?.address || customer?.fulfillmentType || "In-Store Pickup";
+        try {
+          const { httpRequest } = await import("./http_helpers.mjs");
+          const roomOrderId = orderId || primaryId;
+          await httpRequest("http://127.0.0.1:5050/api/orders/webhook", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              order_id: roomOrderId,
+              shop_slug: resolvedShopSlug,
+              customer_name: custName,
+              customer_phone: custPhone,
+              items: Array.isArray(items) ? items.map(i => ({ name: i.name, qty: i.quantity || i.qty || 1, price: i.price || 0 })) : [],
+              total_amount: Number(amount) || 0,
+              currency: "KES",
+              notes: `[${matchedShop?.name || shopName || "Store"}] Pickup: ${pickup} | M-Pesa: ${cleanCode}`,
+              skip_whatsapp_notify: true
+            })
+          });
+        } catch (e) {}
 
-          // Also resolve shop's operations_jid and management_jid from Supabase
-          let resolvedOpsJid = targetGroupJid;
-          let resolvedMgmtJid = null;
-          try {
-            const allShops = await getAllShops();
-            const qSlug = (body.tenantId || body.shopSlug || "").toLowerCase().trim();
-            const matched = allShops.find(s =>
-              (qSlug && s.slug?.toLowerCase() === qSlug) ||
-              (orderId && String(orderId).toUpperCase().includes(s.fulfillment_settings?.whatsapp_routing?.order_prefix || "__NONE__")) ||
-              s.fulfillment_settings?.whatsapp_routing?.operations_jid === targetGroupJid ||
-              s.fulfillment_settings?.whatsapp_routing?.community_jid === targetGroupJid
-            );
-            if (matched?.fulfillment_settings?.whatsapp_routing) {
-              resolvedOpsJid = matched.fulfillment_settings.whatsapp_routing.operations_jid || resolvedOpsJid;
-              resolvedMgmtJid = matched.fulfillment_settings.whatsapp_routing.management_jid || null;
-            }
-          } catch (e) {}
+        // 6. Broadcast unified Order + Payment Verified card to Shop Groups & Perpetual Main Groups
+        if (safeSendMessage) {
+          const itemLines = Array.isArray(items) && items.length > 0
+            ? items.map(i => `  • ${i.quantity || i.qty || 1}x *${i.name}*`).join("\n")
+            : "  • Order Items";
+          const shortUuid = primaryId ? String(primaryId).slice(0, 8).toUpperCase() : (orderId || "").slice(0, 8).toUpperCase();
+          const refLabel = (orderId && orderId !== primaryId) ? `#${shortUuid} (\`${orderId}\`)` : `#${shortUuid}`;
+          const storeLabel = matchedShop?.name || shopName || "Storefront";
+
+          const verifyCard =
+            `💰 *[ORDER PAID & VERIFIED — ${storeLabel.toUpperCase()}]*\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `• *Order:* ${refLabel}\n` +
+            `• *Customer:* ${custName}${custPhone ? ` (${custPhone})` : ""}\n` +
+            `• *Fulfillment:* ${pickup}\n` +
+            `• *Amount Paid:* KES ${Number(amount || 0).toLocaleString()}\n` +
+            `• *M-Pesa Ref:* \`${cleanCode}\` ✅\n` +
+            `• *Items:*\n${itemLines}\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `⚡ *Next Step:* Reply \`!pack ${shortUuid}\` to begin packaging.`;
+
+          let resolvedOpsJid = matchedShop?.fulfillment_settings?.whatsapp_routing?.operations_jid || targetGroupJid;
+          let resolvedMgmtJid = matchedShop?.fulfillment_settings?.whatsapp_routing?.management_jid || null;
 
           const verifyTargets = new Set([
             GROUPS?.general?.jid || "120363429929736148@g.us",
@@ -554,10 +595,10 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
           success: true,
           status: "PAID",
           paired: true,
-          orderId,
-          code,
+          orderId: primaryId || orderId,
+          code: cleanCode,
           pickupPin: String(Math.floor(1000 + Math.random() * 9000)),
-          message: `Payment code ${code} registered and verified.`
+          message: `Payment code ${cleanCode} registered and verified.`
         }));
       } catch (err) {
         res.writeHead(400);
@@ -585,7 +626,8 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
         });
         const rows = await dbRes.json();
         const order = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
-        const isPaid = order?.status === "paid";
+        const paidStatuses = new Set(["paid", "preparing", "cooking", "packaging", "verified", "ready", "in_transit", "dispatched", "delivered", "completed"]);
+        const isPaid = Boolean(order?.status && paidStatuses.has(order.status.toLowerCase()));
         res.writeHead(200);
         return res.end(JSON.stringify({
           success: true,

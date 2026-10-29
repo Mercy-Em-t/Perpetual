@@ -47,10 +47,12 @@ class OrderManager:
         customer_phone: str = "",
         currency: str = "KES",
         notes: str = "",
-        shop_slug: str = "leahs-kitchen"
+        shop_slug: str = "leahs-kitchen",
+        order_id: Optional[str] = None,
+        skip_whatsapp_notify: bool = False
     ) -> Dict[str, Any]:
         """Creates a new incoming order in the initial station and notifies Floor Ops."""
-        order_id = f"ORD-{uuid.uuid4().hex[:6].upper()}"
+        order_id = order_id or f"ORD-{uuid.uuid4().hex[:6].upper()}"
         now = time.time()
         items_json = json.dumps(items)
         initial_station = PipelineManager.get_initial_station(shop_slug)
@@ -59,7 +61,7 @@ class OrderManager:
             conn = db.get_connection()
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO orders (
+                INSERT OR REPLACE INTO orders (
                     order_id, shop_slug, customer_name, customer_phone, items,
                     total_amount, currency, station, payment_ref, courier_name,
                     notes, created_at, updated_at
@@ -104,13 +106,14 @@ class OrderManager:
             f"╰────────────────────────────────╯\n"
             f"_Reply:_ `{st_cmd} {order_id} <reference>`"
         )
-        dispatch_to_whatsapp_general(ops_card)
+        if not skip_whatsapp_notify:
+            dispatch_to_whatsapp_general(ops_card)
 
-        # Also route to the shop-specific Operations WhatsApp Group
-        shop_groups = PipelineManager.get_shop_whatsapp_groups(shop_slug)
-        shop_ops_jid = shop_groups.get("operations_jid")
-        if shop_ops_jid and shop_ops_jid != "120363429929736148@g.us":
-            dispatch_to_whatsapp_jid(shop_ops_jid, ops_card)
+            # Also route to the shop-specific Operations WhatsApp Group
+            shop_groups = PipelineManager.get_shop_whatsapp_groups(shop_slug)
+            shop_ops_jid = shop_groups.get("operations_jid")
+            if shop_ops_jid and shop_ops_jid != "120363429929736148@g.us":
+                dispatch_to_whatsapp_jid(shop_ops_jid, ops_card)
 
         return OrderManager.get_order(order_id)
 

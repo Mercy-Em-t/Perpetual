@@ -61,6 +61,8 @@ def ingest_order_webhook():
     currency = data.get("currency", "KES")
     notes = data.get("notes", "")
     shop_slug = data.get("shop_slug", "leahs-kitchen")
+    order_id = data.get("order_id")
+    skip_whatsapp_notify = bool(data.get("skip_whatsapp_notify", False))
 
     order = OrderManager.create_order(
         customer_name=customer_name,
@@ -69,7 +71,9 @@ def ingest_order_webhook():
         total_amount=total_amount,
         currency=currency,
         notes=notes,
-        shop_slug=shop_slug
+        shop_slug=shop_slug,
+        order_id=order_id,
+        skip_whatsapp_notify=skip_whatsapp_notify
     )
 
     return jsonify({"status": "success", "order": order}), 201
