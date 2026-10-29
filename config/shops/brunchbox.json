@@ -1,0 +1,70 @@
+{
+  "shop_slug": "brunchbox",
+  "shop_name": "Brunchbox",
+  "industry": "food_and_beverage",
+  "order_prefix": "BRB",
+  "whatsapp_groups": {
+    "operations_jid": "120363432072091775@g.us",
+    "operations_name": "Brunchbox",
+    "management_jid": "120363432072091775@g.us",
+    "management_name": "Brunchbox",
+    "community_jid": "120363432072091775@g.us",
+    "community_name": "Brunchbox"
+  },
+  "stations": [
+    {
+      "id": "PENDING",
+      "label": "Order Received",
+      "command": null,
+      "role": "SYSTEM",
+      "notify_customer": false
+    },
+    {
+      "id": "COOKING",
+      "label": "In Kitchen (Cooking)",
+      "command": "!cook",
+      "role": "OPERATIONS",
+      "notify_customer": false
+    },
+    {
+      "id": "PACKAGING",
+      "label": "Packaging & Boxing",
+      "command": "!pack",
+      "role": "OPERATIONS",
+      "notify_customer": false
+    },
+    {
+      "id": "READY",
+      "label": "Ready for Rider / Pickup",
+      "command": "!ready",
+      "role": "OPERATIONS",
+      "notify_customer": true
+    },
+    {
+      "id": "IN_TRANSIT",
+      "label": "Out for Delivery",
+      "command": "!dispatch",
+      "role": "OPERATIONS",
+      "notify_customer": true
+    },
+    {
+      "id": "DELIVERED",
+      "label": "Delivered (Awaiting Customer Confirmation)",
+      "command": "!delivered",
+      "role": "RIDER",
+      "notify_customer": true
+    },
+    {
+      "id": "COMPLETED",
+      "label": "Completed & Confirmed",
+      "command": "!confirm",
+      "role": "CUSTOMER",
+      "notify_customer": true
+    }
+  ],
+  "dual_confirmation": {
+    "enabled": true,
+    "rider_station": "DELIVERED",
+    "customer_station": "COMPLETED"
+  }
+}

@@ -8,35 +8,53 @@
       {
         "id": "PENDING",
         "label": "Payment Verification",
-        "emoji": "🟡",
+        "emoji": "\ud83d\udfe1",
         "action_command": "!paid",
-        "authorized_roles": ["CASHIER", "MANAGEMENT"],
+        "authorized_roles": [
+          "CASHIER",
+          "MANAGEMENT"
+        ],
         "next": "CUTTING"
       },
       {
         "id": "CUTTING",
         "label": "Fabric Cut & Measure",
-        "emoji": "✂️",
+        "emoji": "\u2702\ufe0f",
         "action_command": "!cut",
-        "authorized_roles": ["TAILOR", "PACKAGER"],
+        "authorized_roles": [
+          "TAILOR",
+          "PACKAGER"
+        ],
         "next": "PACKAGING"
       },
       {
         "id": "PACKAGING",
         "label": "Tied & Wrapped",
-        "emoji": "📦",
+        "emoji": "\ud83d\udce6",
         "action_command": "!pack",
-        "authorized_roles": ["PACKAGER"],
+        "authorized_roles": [
+          "PACKAGER"
+        ],
         "next": "DISPATCHED"
       },
       {
         "id": "DISPATCHED",
         "label": "Rider Dispatched",
-        "emoji": "🚚",
+        "emoji": "\ud83d\ude9a",
         "action_command": "!dispatch",
-        "authorized_roles": ["COURIER"],
+        "authorized_roles": [
+          "COURIER"
+        ],
         "next": "COMPLETED"
       }
     ]
+  },
+  "whatsapp_groups": {
+    "operations_jid": "120363431571554014@g.us",
+    "operations_name": "Digital Nairobi Haberdashery Operations",
+    "management_jid": "120363413403992723@g.us",
+    "management_name": "Digital Nairobi Haberdashery Admin",
+    "community_jid": "120363414788140717@g.us",
+    "community_name": "Digital Nairobi Haberdashery Community"
   }
 }

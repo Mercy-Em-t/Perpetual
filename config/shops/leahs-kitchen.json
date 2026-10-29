@@ -8,51 +8,77 @@
       {
         "id": "PENDING",
         "label": "Awaiting M-Pesa",
-        "emoji": "🟡",
+        "emoji": "\ud83d\udfe1",
         "action_command": "!paid",
-        "authorized_roles": ["CASHIER", "MANAGEMENT"],
+        "authorized_roles": [
+          "CASHIER",
+          "MANAGEMENT"
+        ],
         "next": "COOKING"
       },
       {
         "id": "COOKING",
         "label": "Kitchen Prep",
-        "emoji": "🍳",
+        "emoji": "\ud83c\udf73",
         "action_command": "!cook",
-        "authorized_roles": ["KITCHEN_CHEF"],
+        "authorized_roles": [
+          "KITCHEN_CHEF"
+        ],
         "next": "PACKAGING"
       },
       {
         "id": "PACKAGING",
         "label": "Tamper-Proof Boxed",
-        "emoji": "📦",
+        "emoji": "\ud83d\udce6",
         "action_command": "!pack",
-        "authorized_roles": ["PACKAGER"],
+        "authorized_roles": [
+          "PACKAGER"
+        ],
         "next": "READY"
       },
       {
         "id": "READY",
         "label": "At Pickup Counter",
-        "emoji": "🥡",
+        "emoji": "\ud83e\udd61",
         "action_command": "!dispatch",
-        "authorized_roles": ["COURIER", "COUNTER_STAFF"],
+        "authorized_roles": [
+          "COURIER",
+          "COUNTER_STAFF"
+        ],
         "next": "IN_TRANSIT"
       },
       {
         "id": "IN_TRANSIT",
         "label": "Out for Delivery",
-        "emoji": "🚚",
+        "emoji": "\ud83d\ude9a",
         "action_command": "!delivered",
-        "authorized_roles": ["COURIER", "MANAGEMENT"],
+        "authorized_roles": [
+          "COURIER",
+          "MANAGEMENT"
+        ],
         "next": "DELIVERED"
       },
       {
         "id": "DELIVERED",
         "label": "Awaiting Customer Confirmation",
-        "emoji": "📍",
+        "emoji": "\ud83d\udccd",
         "action_command": "!confirm",
-        "authorized_roles": ["CUSTOMER", "COUNTER_STAFF", "MANAGEMENT"],
+        "authorized_roles": [
+          "CUSTOMER",
+          "COUNTER_STAFF",
+          "MANAGEMENT"
+        ],
         "next": "COMPLETED"
       }
     ]
+  },
+  "shop_id": "b8c8be14-7bcf-4dd5-86fa-d672ac7b4422",
+  "whatsapp_groups": {
+    "operations_jid": "120363431292803284@g.us",
+    "operations_name": "Leah's Kitchen",
+    "management_jid": "120363431292803284@g.us",
+    "management_name": "Leah's Kitchen",
+    "community_jid": "120363412609340679@g.us",
+    "community_name": "Leah's Kitchen - Group Orders"
   }
 }
