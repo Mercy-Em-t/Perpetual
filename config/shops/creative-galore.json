@@ -1,8 +1,10 @@
 {
   "shop_id": "d0aad5aa-4ae1-4644-8a0a-8c634b855ec0",
   "shop_slug": "creative-galore",
+  "name": "Creative Galore",
   "shop_name": "Creative Galore",
   "industry": "crafts",
+  "currency": "KES",
   "order_prefix": "CRG",
   "mpesa_till_number": "5758419",
   "whatsapp_groups": {
@@ -14,50 +16,59 @@
     "community_name": "Creative Galore Community",
     "community_invite_url": "https://chat.whatsapp.com/IvdTnrvAHoVCVMmQSfEhc3"
   },
-  "stations": [
-    {
-      "id": "PENDING",
-      "label": "Order Received",
-      "command": null,
-      "role": "SYSTEM",
-      "notify_customer": false
-    },
-    {
-      "id": "PACKAGING",
-      "label": "Crafting & Packaging",
-      "command": "!pack",
-      "role": "OPERATIONS",
-      "notify_customer": false
-    },
-    {
-      "id": "VERIFIED",
-      "label": "Quality & Payment Verified",
-      "command": "!verify",
-      "role": "MANAGEMENT",
-      "notify_customer": true
-    },
-    {
-      "id": "IN_TRANSIT",
-      "label": "Dispatched with Rider",
-      "command": "!dispatch",
-      "role": "OPERATIONS",
-      "notify_customer": true
-    },
-    {
-      "id": "DELIVERED",
-      "label": "Delivered (Awaiting Customer Confirmation)",
-      "command": "!delivered",
-      "role": "RIDER",
-      "notify_customer": true
-    },
-    {
-      "id": "COMPLETED",
-      "label": "Completed & Confirmed",
-      "command": "!confirm",
-      "role": "CUSTOMER",
-      "notify_customer": true
-    }
-  ],
+  "pipeline": {
+    "initial_station": "PENDING",
+    "stations": [
+      {
+        "id": "PENDING",
+        "label": "Pending Payment",
+        "emoji": "🟡",
+        "action_command": "!paid",
+        "authorized_roles": ["CASHIER", "MANAGEMENT"],
+        "next": "PACKAGING"
+      },
+      {
+        "id": "PACKAGING",
+        "label": "Crafting & Boxing",
+        "emoji": "📦",
+        "action_command": "!pack",
+        "authorized_roles": ["PACKAGER", "OPERATIONS"],
+        "next": "VERIFIED"
+      },
+      {
+        "id": "VERIFIED",
+        "label": "QA & Payment Verified",
+        "emoji": "🔍",
+        "action_command": "!verify",
+        "authorized_roles": ["QA_INSPECTOR", "MANAGEMENT"],
+        "next": "IN_TRANSIT"
+      },
+      {
+        "id": "IN_TRANSIT",
+        "label": "Dispatched with Rider",
+        "emoji": "🚚",
+        "action_command": "!dispatch",
+        "authorized_roles": ["COURIER", "OPERATIONS"],
+        "next": "DELIVERED"
+      },
+      {
+        "id": "DELIVERED",
+        "label": "Delivered (Awaiting Customer)",
+        "emoji": "📍",
+        "action_command": "!delivered",
+        "authorized_roles": ["COURIER", "RIDER", "MANAGEMENT"],
+        "next": "COMPLETED"
+      },
+      {
+        "id": "COMPLETED",
+        "label": "Completed & Confirmed",
+        "emoji": "✅",
+        "action_command": "!confirm",
+        "authorized_roles": ["CUSTOMER", "MANAGEMENT"],
+        "next": null
+      }
+    ]
+  },
   "dual_confirmation": {
     "enabled": true,
     "rider_station": "DELIVERED",

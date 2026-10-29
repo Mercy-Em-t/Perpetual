@@ -1,0 +1,66 @@
+{
+  "shop_slug": "thehobby",
+  "name": "The Hobby Hive By TM",
+  "shop_name": "The Hobby Hive By TM",
+  "industry": "crafts",
+  "currency": "KES",
+  "order_prefix": "HBH",
+  "whatsapp_groups": {
+    "operations_jid": "120363420879526788@g.us",
+    "operations_name": "The Hobby Hive By TM",
+    "management_jid": "120363403236658728@g.us",
+    "management_name": "The Hobby Hive By TM",
+    "community_jid": "120363414812764049@g.us",
+    "community_name": "The Hobby Hive"
+  },
+  "pipeline": {
+    "initial_station": "PENDING",
+    "stations": [
+      {
+        "id": "PENDING",
+        "label": "Pending Payment",
+        "emoji": "🟡",
+        "action_command": "!paid",
+        "authorized_roles": ["CASHIER", "MANAGEMENT"],
+        "next": "PACKAGING"
+      },
+      {
+        "id": "PACKAGING",
+        "label": "Kit Curation & Boxing",
+        "emoji": "📦",
+        "action_command": "!pack",
+        "authorized_roles": ["PACKAGER", "OPERATIONS"],
+        "next": "VERIFIED"
+      },
+      {
+        "id": "VERIFIED",
+        "label": "QA Approved",
+        "emoji": "🔍",
+        "action_command": "!verify",
+        "authorized_roles": ["QA_INSPECTOR", "MANAGEMENT"],
+        "next": "IN_TRANSIT"
+      },
+      {
+        "id": "IN_TRANSIT",
+        "label": "Dispatched with Rider",
+        "emoji": "🚚",
+        "action_command": "!dispatch",
+        "authorized_roles": ["COURIER", "OPERATIONS"],
+        "next": "DELIVERED"
+      },
+      {
+        "id": "DELIVERED",
+        "label": "Delivered (Awaiting Customer)",
+        "emoji": "📍",
+        "action_command": "!confirm",
+        "authorized_roles": ["CUSTOMER", "MANAGEMENT"],
+        "next": "COMPLETED"
+      }
+    ]
+  },
+  "dual_confirmation": {
+    "enabled": true,
+    "rider_station": "DELIVERED",
+    "customer_station": "COMPLETED"
+  }
+}

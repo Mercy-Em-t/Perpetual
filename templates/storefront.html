@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Perpetual Storefronts — Creative Gales & Haberdashery</title>
+  <title>Perpetual Storefronts — Multi-Tenant Gateway</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
@@ -192,19 +192,30 @@
   <div class="store-container">
     <!-- Brand Selector -->
     <div class="brand-tabs">
-      <button class="tab-btn active" onclick="switchBrand('gales')">
-        <span>🎨</span> Creative Gales (Decor & Spatial)
+      <button class="tab-btn active" onclick="switchBrand('galore')">
+        <span>🎨</span> Creative Galore (Decor & Crafts)
       </button>
       <button class="tab-btn" onclick="switchBrand('haberdashery')">
         <span>🧵</span> Digital Nairobi Haberdashery
       </button>
       <button class="tab-btn" onclick="switchBrand('kitchen')">
-        <span>🍳</span> Leah's Kitchen (Rotating Pre-Orders)
+        <span>🍳</span> Leah's Kitchen (Pre-Orders)
+      </button>
+      <button class="tab-btn" onclick="switchBrand('brunchbox')">
+        <span>🥐</span> Brunchbox (Hot & Tasty)
+      </button>
+      <button class="tab-btn" onclick="switchBrand('thehobby')">
+        <span>🧶</span> The Hobby Hive By TM
       </button>
     </div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
-      <h2 id="store-title" style="font-size:1.4rem;font-weight:700;">Creative Gales — Spatial Art & Bespoke Decor</h2>
+      <div>
+        <h2 id="store-title" style="font-size:1.4rem;font-weight:700;margin-bottom:0.25rem;">Creative Galore — Spatial Art & Bespoke Decor</h2>
+        <div id="store-whatsapp-badge" style="font-size:0.78rem;color:var(--text-muted);font-family:var(--font-mono);">
+          📱 WhatsApp Ops: Creative Galore Operations &bull; Mirrored to: perpetua
+        </div>
+      </div>
       <span id="cart-counter" style="background:var(--accent-cyan);color:#0d1117;font-weight:700;padding:0.25rem 0.75rem;border-radius:999px;font-size:0.8rem;">
         0 Items in Cart
       </span>
@@ -293,14 +304,14 @@
 
   <script>
     const CATALOGS = {
-      gales: {
-        title: "Creative Gales — Spatial Art & Bespoke Decor",
-        currency: "USD",
+      galore: {
+        title: "Creative Galore — Spatial Art & Bespoke Crafts",
+        currency: "KES",
         items: [
-          { id: "cg_1", name: "Midnight Blue Velvet Sofa", price: 450.00, emoji: "🛋️", desc: "Handcrafted velvet finish tailored for matrix-locked salon setups." },
-          { id: "cg_2", name: "Amber Sconce Photometric Lamp", price: 85.00, emoji: "💡", desc: "Warm downward-throw luminaire calibrated for 0.80 ambient falloff." },
-          { id: "cg_3", name: "Matte Terracotta Ceramic Vase", price: 38.00, emoji: "🏺", desc: "Architectural ceramic vessel designed for floating shelf anchors." },
-          { id: "cg_4", name: "Woven Bohemian Macrame Hanging", price: 48.00, emoji: "🧶", desc: "Hand-knotted cotton fiber tapestry for acoustic dampening." }
+          { id: "cg_1", name: "Handmade Resin Geode Coaster Set (4pc)", price: 1850.00, emoji: "🎨", desc: "Bespoke emerald & gold leaf epoxy resin coasters handcrafted in Nairobi." },
+          { id: "cg_2", name: "Amber Sconce Photometric Lamp", price: 4200.00, emoji: "💡", desc: "Warm downward-throw luminaire calibrated for cozy ambient interiors." },
+          { id: "cg_3", name: "Matte Terracotta Ceramic Vase", price: 2400.00, emoji: "🏺", desc: "Architectural hand-thrown ceramic vessel for dried botanicals." },
+          { id: "cg_4", name: "Woven Bohemian Macrame Wall Hanging", price: 3100.00, emoji: "🧶", desc: "Hand-knotted natural cotton cord tapestry on driftwood dowel." }
         ]
       },
       haberdashery: {
@@ -322,27 +333,56 @@
           { id: "leah-003", name: "Swahili Coconut Chicken Stew with Jeera Rice", price: 850.00, emoji: "🍗", desc: "Slow-simmered tender chicken in rich coastal coconut curry, paired with fragrant basmati cumin rice." },
           { id: "leah-004", name: "Coastal Slow-Simmered Beef Pilau with Kachumbari", price: 750.00, emoji: "🍛", desc: "Fragrant spiced pilau rice cooked with tender braised beef chunks, cloves, cardamom, and fresh kachumbari." }
         ]
+      },
+      brunchbox: {
+        title: "Brunchbox — Hot & Tasty All-Day Artisanal Brunch",
+        currency: "KES",
+        items: [
+          { id: "bb-001", name: "Caramelized Banana & Pecan Belgian Waffles", price: 950.00, emoji: "🧇", desc: "Crisp golden buttermilk waffles topped with roasted pecans, whipped mascarpone, and warm maple." },
+          { id: "bb-002", name: "Smoked Beef Brisket Eggs Benedict", price: 1250.00, emoji: "🍳", desc: "Poached pasture-raised eggs on toasted brioche with 12-hour smoked brisket and cayenne hollandaise." },
+          { id: "bb-003", name: "Spiced Chai Latte & Cinnamon Brioche Bun", price: 650.00, emoji: "🥐", desc: "House-infused masala chai paired with a warm cardamom-cinnamon glazed brioche knot." },
+          { id: "bb-004", name: "Avocado & Grilled Halloumi Sourdough Toast", price: 1100.00, emoji: "🥑", desc: "Artisan country sourdough topped with smashed Hass avocado, seared halloumi, and chili flakes." }
+        ]
+      },
+      thehobby: {
+        title: "The Hobby Hive By TM — DIY Craft Kits & Yarn Studio",
+        currency: "KES",
+        items: [
+          { id: "hh-001", name: "Chunky Merino Crochet Blanket Starter Kit", price: 2800.00, emoji: "🧶", desc: "Includes 4 skeins of super-soft merino blend yarn, bamboo ergonomic hook, and pattern guide." },
+          { id: "hh-002", name: "Botanical Embroidery Hoop Trio Kit", price: 1650.00, emoji: "🪡", desc: "Pre-printed linen fabric, bamboo hoops, DMC floss palette, and step-by-step stitch booklet." },
+          { id: "hh-003", name: "Soy Candle Pouring & Fragrance Lab Box", price: 3200.00, emoji: "🕯️", desc: "Natural soy wax flakes, amber glass jars, wooden crackle wicks, and coastalessential oils." },
+          { id: "hh-004", name: "Watercolor Floral Postcard Set (24-Pan)", price: 2100.00, emoji: "🖌️", desc: "Artist-grade half-pan watercolors with cold-press 300gsm cotton postcard pad and brush pen." }
+        ]
       }
     };
 
+    const BRAND_ORDER = ["galore", "haberdashery", "kitchen", "brunchbox", "thehobby"];
     const BRAND_SLUG_MAP = {
-      gales: "creative-gales",
+      galore: "creative-galore",
       haberdashery: "haberdashery",
-      kitchen: "leahs-kitchen"
+      kitchen: "leahs-kitchen",
+      brunchbox: "brunchbox",
+      thehobby: "thehobby"
     };
 
-    let activeBrand = "gales";
+    let activeBrand = "galore";
     let cart = [];
     let currentPipelineStations = [];
 
     async function loadShopPipeline(brandKey) {
-      const slug = BRAND_SLUG_MAP[brandKey] || "leahs-kitchen";
+      const slug = BRAND_SLUG_MAP[brandKey] || "creative-galore";
       try {
         const res = await fetch(`/api/orders/pipeline/${slug}`);
         if (res.ok) {
           const data = await res.json();
           currentPipelineStations = data.pipeline?.stations || [];
           renderDynamicStepper(currentPipelineStations);
+          const badgeEl = document.getElementById("store-whatsapp-badge");
+          if (badgeEl && data.whatsapp_groups) {
+            const opsName = data.whatsapp_groups.operations_name || slug;
+            const mgmtName = data.whatsapp_groups.management_name || opsName;
+            badgeEl.innerHTML = `📱 WhatsApp Ops: <b>${opsName}</b> &bull; Admin: <b>${mgmtName}</b> &bull; Mirrored to: <b>perpetua</b>`;
+          }
         }
       } catch (e) {
         console.warn("Could not load dynamic pipeline:", e);
@@ -362,8 +402,9 @@
     function switchBrand(brandKey) {
       activeBrand = brandKey;
       cart = [];
+      const activeIdx = BRAND_ORDER.indexOf(brandKey);
       document.querySelectorAll(".tab-btn").forEach((b, idx) => {
-        b.classList.toggle("active", (brandKey === 'gales' && idx === 0) || (brandKey === 'haberdashery' && idx === 1) || (brandKey === 'kitchen' && idx === 2));
+        b.classList.toggle("active", idx === activeIdx);
       });
       document.getElementById("store-title").textContent = CATALOGS[brandKey].title;
       document.getElementById("kitchen-cutoff-notice").style.display = brandKey === 'kitchen' ? 'block' : 'none';
@@ -559,7 +600,7 @@
 
     // Initialize
     renderCatalog();
-    loadShopPipeline("gales");
+    loadShopPipeline("galore");
   </script>
 </body>
 </html>

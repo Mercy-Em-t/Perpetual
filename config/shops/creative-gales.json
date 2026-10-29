@@ -1,7 +1,16 @@
 {
+  "shop_id": "d0aad5aa-4ae1-4644-8a0a-8c634b855ec0",
   "shop_slug": "creative-gales",
-  "name": "Creative Gales",
+  "name": "Creative Galore",
   "currency": "USD",
+  "whatsapp_groups": {
+    "operations_jid": "120363429060534928@g.us",
+    "operations_name": "Creative Galore Operations",
+    "management_jid": "120363431644465504@g.us",
+    "management_name": "Creative Galore Admin",
+    "community_jid": "120363430166313076@g.us",
+    "community_name": "Creative Galore Community"
+  },
   "pipeline": {
     "initial_station": "PENDING",
     "stations": [

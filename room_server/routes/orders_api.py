@@ -3,12 +3,37 @@ Orders & Operational Station API Blueprint
 Ingests store webhooks, coordinates 5-station operational handoffs, and computes rollups.
 """
 
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify
 from room_server.models.order import OrderManager
 from room_server.models.pipeline import PipelineManager
 from room_server.services.whatsapp_notifier import dispatch_to_whatsapp_admin
 
 orders_bp = Blueprint("orders_api", __name__, url_prefix="/api/orders")
+
+EAT_TZ = timezone(timedelta(hours=3))
+
+
+@orders_bp.route("/shops", methods=["GET"])
+def list_configured_shops():
+    """Lists all active shops, their currencies, WhatsApp groups, and pipeline stations."""
+    shops = PipelineManager.list_all_shops()
+    return jsonify({"shops": shops, "count": len(shops)})
+
+
+@orders_bp.route("/validate-cutoff", methods=["POST", "GET"])
+def validate_kitchen_cutoff():
+    """Evaluates whether the current EAT time is within the 17:00 + 15m grace window."""
+    now_eat = datetime.now(EAT_TZ)
+    hour = now_eat.hour
+    minute = now_eat.minute
+    is_past_cutoff = (hour > 17) or (hour == 17 and minute > 15)
+    return jsonify({
+        "current_time_eat": now_eat.strftime("%H:%M:%S"),
+        "is_scheduled_for_today": not is_past_cutoff,
+        "batch_day": "TODAY" if not is_past_cutoff else "TOMORROW",
+        "warning": "Order placed after 17:00 EAT. Scheduled for tomorrow's batch." if is_past_cutoff else None
+    })
 
 
 @orders_bp.route("/pipeline/<shop_slug>", methods=["GET"])

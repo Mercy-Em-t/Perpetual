@@ -33,7 +33,8 @@ def _async_post(url_path, payload):
         return
 
     # De-duplicate identical alerts within 15 seconds
-    throttle_key = f"{url_path}:{payload.get('task_id')}:{payload.get('status') or payload.get('title')}"
+    target_id = payload.get("jid") or payload.get("group") or ""
+    throttle_key = f"{url_path}:{target_id}:{payload.get('task_id')}:{payload.get('status') or payload.get('title') or (payload.get('message') or '')[:48]}"
     if _is_throttled(throttle_key):
         return
 
@@ -93,6 +94,16 @@ def dispatch_to_whatsapp_general(message_text):
     """Directly dispatches formatted message card to operations group 'perpetua'"""
     _async_post("/api/notify-group", {
         "group": "general",
+        "message": message_text
+    })
+
+
+def dispatch_to_whatsapp_jid(jid, message_text):
+    """Directly dispatches formatted message card to a specific WhatsApp JID (e.g., shop operations/admin group)."""
+    if not jid:
+        return
+    _async_post("/api/notify-group", {
+        "jid": jid,
         "message": message_text
     })
 

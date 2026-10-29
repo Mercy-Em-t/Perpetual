@@ -11,7 +11,11 @@ from typing import Dict, Any, List, Optional
 from room_server.db import db
 from room_server.models.message import MessageBroker
 from room_server.models.pipeline import PipelineManager
-from room_server.services.whatsapp_notifier import dispatch_to_whatsapp_general, dispatch_to_whatsapp_admin
+from room_server.services.whatsapp_notifier import (
+    dispatch_to_whatsapp_general,
+    dispatch_to_whatsapp_admin,
+    dispatch_to_whatsapp_jid
+)
 
 
 class OrderManager:
@@ -101,6 +105,12 @@ class OrderManager:
             f"_Reply:_ `{st_cmd} {order_id} <reference>`"
         )
         dispatch_to_whatsapp_general(ops_card)
+
+        # Also route to the shop-specific Operations WhatsApp Group
+        shop_groups = PipelineManager.get_shop_whatsapp_groups(shop_slug)
+        shop_ops_jid = shop_groups.get("operations_jid")
+        if shop_ops_jid and shop_ops_jid != "120363429929736148@g.us":
+            dispatch_to_whatsapp_jid(shop_ops_jid, ops_card)
 
         return OrderManager.get_order(order_id)
 
@@ -209,6 +219,19 @@ class OrderManager:
             f"╰────────────────────────────────╯"
         )
         dispatch_to_whatsapp_general(ops_msg)
+
+        # Also route to the shop-specific Operations & Management WhatsApp Groups + Perpetual Admin Oversight
+        shop_groups = PipelineManager.get_shop_whatsapp_groups(shop_slug)
+        shop_ops_jid = shop_groups.get("operations_jid")
+        shop_mgmt_jid = shop_groups.get("management_jid")
+
+        if shop_ops_jid and shop_ops_jid != "120363429929736148@g.us":
+            dispatch_to_whatsapp_jid(shop_ops_jid, ops_msg)
+
+        if new_station in ("PAID", "DELIVERED", "COMPLETED", "DISPATCHED", "CANCELLED"):
+            dispatch_to_whatsapp_admin(ops_msg)
+            if shop_mgmt_jid and shop_mgmt_jid not in (shop_ops_jid, "120363415291701803@g.us"):
+                dispatch_to_whatsapp_jid(shop_mgmt_jid, ops_msg)
 
         return OrderManager.get_order(order_id)
 

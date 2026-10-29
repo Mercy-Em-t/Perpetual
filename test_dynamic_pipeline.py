@@ -128,6 +128,36 @@ class DynamicPipelineTestCase(unittest.TestCase):
         })
         self.assertEqual(res.status_code, 400)
 
+    def test_04_multi_shop_pipelines_and_whatsapp_routing(self):
+        expected_shops = {
+            "creative-galore": "120363429060534928@g.us",
+            "leahs-kitchen": "120363431292803284@g.us",
+            "haberdashery": "120363431571554014@g.us",
+            "brunchbox": "120363432072091775@g.us",
+            "thehobby": "120363420879526788@g.us"
+        }
+        for slug, expected_ops_jid in expected_shops.items():
+            resp = self.client.get(f"/api/orders/pipeline/{slug}")
+            self.assertEqual(resp.status_code, 200, f"Failed for {slug}")
+            data = resp.get_json()
+            self.assertEqual(data["shop_slug"], slug)
+            self.assertIn("pipeline", data)
+            self.assertTrue(len(data["pipeline"]["stations"]) >= 4)
+            self.assertEqual(data["whatsapp_groups"]["operations_jid"], expected_ops_jid)
+
+        # Verify /api/orders/shops directory endpoint
+        shops_resp = self.client.get("/api/orders/shops")
+        self.assertEqual(shops_resp.status_code, 200)
+        shops_data = shops_resp.get_json()
+        self.assertGreaterEqual(shops_data["count"], 5)
+
+        # Verify /api/orders/validate-cutoff endpoint
+        cutoff_resp = self.client.get("/api/orders/validate-cutoff")
+        self.assertEqual(cutoff_resp.status_code, 200)
+        cutoff_data = cutoff_resp.get_json()
+        self.assertIn("batch_day", cutoff_data)
+        self.assertIn("is_scheduled_for_today", cutoff_data)
+
 
 if __name__ == "__main__":
     unittest.main()

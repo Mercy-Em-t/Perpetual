@@ -261,14 +261,16 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
       return res.end(JSON.stringify({ groups: GROUPS }));
     }
 
-    // POST /api/notify-group (Direct card message to specific group)
+    // POST /api/notify-group (Direct card message to specific group key or direct JID)
     if (req.method === "POST" && parsedUrl.pathname === "/api/notify-group") {
       try {
         const body = await parseJsonBody(req);
+        const directJid = body.jid || (typeof body.group === "string" && body.group.includes("@") ? body.group : null);
         const groupKey = body.group || "general";
         const targetGroup = GROUPS[groupKey] || GROUPS.general;
+        const resolvedJid = directJid || targetGroup?.jid;
 
-        if (!targetGroup.jid) {
+        if (!resolvedJid) {
           res.writeHead(400);
           return res.end(JSON.stringify({ error: `Group '${groupKey}' JID not resolved` }));
         }
@@ -279,9 +281,9 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
           return res.end(JSON.stringify({ error: "Missing message text" }));
         }
 
-        await safeSendMessage(targetGroup.jid, { text: msgText });
+        await safeSendMessage(resolvedJid, { text: msgText });
         res.writeHead(200);
-        return res.end(JSON.stringify({ status: "dispatched", group: groupKey, jid: targetGroup.jid }));
+        return res.end(JSON.stringify({ status: "dispatched", group: groupKey, jid: resolvedJid }));
       } catch (err) {
         res.writeHead(500);
         return res.end(JSON.stringify({ error: err.message }));

@@ -1,7 +1,9 @@
 {
   "shop_slug": "brunchbox",
+  "name": "Brunchbox",
   "shop_name": "Brunchbox",
   "industry": "food_and_beverage",
+  "currency": "KES",
   "order_prefix": "BRB",
   "whatsapp_groups": {
     "operations_jid": "120363432072091775@g.us",
@@ -11,57 +13,59 @@
     "community_jid": "120363432072091775@g.us",
     "community_name": "Brunchbox"
   },
-  "stations": [
-    {
-      "id": "PENDING",
-      "label": "Order Received",
-      "command": null,
-      "role": "SYSTEM",
-      "notify_customer": false
-    },
-    {
-      "id": "COOKING",
-      "label": "In Kitchen (Cooking)",
-      "command": "!cook",
-      "role": "OPERATIONS",
-      "notify_customer": false
-    },
-    {
-      "id": "PACKAGING",
-      "label": "Packaging & Boxing",
-      "command": "!pack",
-      "role": "OPERATIONS",
-      "notify_customer": false
-    },
-    {
-      "id": "READY",
-      "label": "Ready for Rider / Pickup",
-      "command": "!ready",
-      "role": "OPERATIONS",
-      "notify_customer": true
-    },
-    {
-      "id": "IN_TRANSIT",
-      "label": "Out for Delivery",
-      "command": "!dispatch",
-      "role": "OPERATIONS",
-      "notify_customer": true
-    },
-    {
-      "id": "DELIVERED",
-      "label": "Delivered (Awaiting Customer Confirmation)",
-      "command": "!delivered",
-      "role": "RIDER",
-      "notify_customer": true
-    },
-    {
-      "id": "COMPLETED",
-      "label": "Completed & Confirmed",
-      "command": "!confirm",
-      "role": "CUSTOMER",
-      "notify_customer": true
-    }
-  ],
+  "pipeline": {
+    "initial_station": "PENDING",
+    "stations": [
+      {
+        "id": "PENDING",
+        "label": "Awaiting M-Pesa",
+        "emoji": "🟡",
+        "action_command": "!paid",
+        "authorized_roles": ["CASHIER", "MANAGEMENT"],
+        "next": "COOKING"
+      },
+      {
+        "id": "COOKING",
+        "label": "In Kitchen (Cooking)",
+        "emoji": "🍳",
+        "action_command": "!cook",
+        "authorized_roles": ["KITCHEN_CHEF", "OPERATIONS"],
+        "next": "PACKAGING"
+      },
+      {
+        "id": "PACKAGING",
+        "label": "Packaging & Boxing",
+        "emoji": "📦",
+        "action_command": "!pack",
+        "authorized_roles": ["PACKAGER", "OPERATIONS"],
+        "next": "READY"
+      },
+      {
+        "id": "READY",
+        "label": "Ready for Rider / Pickup",
+        "emoji": "🥡",
+        "action_command": "!dispatch",
+        "authorized_roles": ["COURIER", "COUNTER_STAFF", "OPERATIONS"],
+        "next": "IN_TRANSIT"
+      },
+      {
+        "id": "IN_TRANSIT",
+        "label": "Out for Delivery",
+        "emoji": "🚚",
+        "action_command": "!delivered",
+        "authorized_roles": ["COURIER", "RIDER", "MANAGEMENT"],
+        "next": "DELIVERED"
+      },
+      {
+        "id": "DELIVERED",
+        "label": "Awaiting Customer Confirmation",
+        "emoji": "📍",
+        "action_command": "!confirm",
+        "authorized_roles": ["CUSTOMER", "MANAGEMENT"],
+        "next": "COMPLETED"
+      }
+    ]
+  },
   "dual_confirmation": {
     "enabled": true,
     "rider_station": "DELIVERED",

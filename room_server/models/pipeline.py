@@ -88,6 +88,36 @@ class PipelineManager:
         return True, next_station, None
 
     @classmethod
+    def get_shop_whatsapp_groups(cls, shop_slug: str) -> Dict[str, Any]:
+        """Returns the whatsapp_groups routing configuration for a shop."""
+        pipeline_data = cls.get_shop_pipeline(shop_slug)
+        if pipeline_data and isinstance(pipeline_data.get("whatsapp_groups"), dict):
+            return pipeline_data["whatsapp_groups"]
+        return {}
+
+    @classmethod
+    def list_all_shops(cls) -> List[Dict[str, Any]]:
+        """Lists all configured shop pipelines from config/shops/*.json."""
+        shops = []
+        if not os.path.exists(CONFIG_SHOPS_DIR):
+            return shops
+        for fname in sorted(os.listdir(CONFIG_SHOPS_DIR)):
+            if not fname.endswith(".json") or fname == "creative-gales.json":
+                continue
+            slug = fname[:-5]
+            data = cls.get_shop_pipeline(slug)
+            if data:
+                shops.append({
+                    "shop_slug": data.get("shop_slug", slug),
+                    "name": data.get("name") or data.get("shop_name") or slug,
+                    "currency": data.get("currency", "KES"),
+                    "whatsapp_groups": data.get("whatsapp_groups", {}),
+                    "initial_station": cls.get_initial_station(slug),
+                    "stations": cls.get_stations(slug)
+                })
+        return shops
+
+    @classmethod
     def validate_role_authorization(
         cls, shop_slug: str, current_station: str, role: str
     ) -> bool:
