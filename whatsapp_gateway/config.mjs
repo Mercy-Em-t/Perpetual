@@ -29,7 +29,7 @@ export const GROUPS = {
   general: {
     name: "perpetua",
     role: "operations",
-    jid: null,
+    jid: "120363429929736148@g.us",
     welcome:
       `🏬 *Perpetua Platform Operations Live*\n\n` +
       `Multi-Store Dispatch & Station Routing Center.\n` +
@@ -47,7 +47,7 @@ export const GROUPS = {
   itHelpdesk: {
     name: "Perpetua - IT Helpdesk",
     role: "support",
-    jid: null,
+    jid: "120363432040872305@g.us",
     welcome:
       `🛡️ *Perpetua IT Helpdesk Active*\n\n` +
       `Channel dedicated to edge gateway telemetry, database connection health, and incident ticketing.\n` +
@@ -60,10 +60,17 @@ export const GROUPS = {
       `• !resolve <ticket_id> [notes] (Close incident ticket)\n` +
       `• !help`
   },
+  community: {
+    name: "Perpetua Community",
+    role: "community",
+    jid: "120363429056719427@g.us",
+    welcome: `🌐 *Perpetua Platform Community Active*`,
+    description: `🌐 Perpetua Platform Community`
+  },
   adminOversight: {
     name: "Perpetua - Admin Oversight",
     role: "executive",
-    jid: null,
+    jid: "120363415291701803@g.us",
     welcome:
       `💼 *Perpetua Executive Oversight Active*\n\n` +
       `Channel dedicated to platform-wide GMV, multi-tenant revenue auditing, and store onboarding.\n` +

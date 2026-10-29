@@ -381,7 +381,24 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
         const orderId = body.orderId || meta.orderId || body.order_id || `ORD-${Date.now().toString().slice(-6)}`;
         const pickup = customer.address || customer.fulfillmentType || meta.deliveryAddress || meta.fulfillmentType || "In-Store Pickup";
 
-        // 1. Post to room_server orders pipeline
+        // Resolve authoritative Shop & WhatsApp Groups from Supabase (getAllShops)
+        let matchedShop = null;
+        try {
+          const allShops = await getAllShops();
+          const qSlug = (body.tenantId || body.shopSlug || body.shop_slug || "").toLowerCase().trim();
+          const qId = (body.shopId || body.shop_id || "").trim();
+          const qName = (shopTitle || "").toLowerCase().trim();
+          matchedShop = allShops.find(s =>
+            (qId && s.id === qId) ||
+            (qSlug && s.slug?.toLowerCase() === qSlug) ||
+            (qName && s.name?.toLowerCase() === qName)
+          ) || null;
+        } catch (e) {}
+
+        const resolvedShopSlug = matchedShop?.slug || body.tenantId || body.shop_slug || "creative-galore";
+        const shopRouting = matchedShop?.fulfillment_settings?.whatsapp_routing || {};
+
+        // 1. Post to room_server orders pipeline with shop_slug
         try {
           await import("./http_helpers.mjs").then(async ({ httpRequest }) => {
             await httpRequest("http://127.0.0.1:5050/api/orders/webhook", {
@@ -389,12 +406,13 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 order_id: orderId,
+                shop_slug: resolvedShopSlug,
                 customer_name: custName,
                 customer_phone: custPhone,
                 items: items.map(i => ({ name: i.name, qty: i.quantity || i.qty || 1, price: i.price || 0 })),
                 total_amount: total,
                 currency: "KES",
-                notes: `[${shopTitle}] Pickup: ${pickup}`
+                notes: `[${matchedShop?.name || shopTitle}] Pickup: ${pickup}`
               })
             });
           });
@@ -404,7 +422,7 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
 
         // 2. Dispatch Order Alert to Perpetua Floor Operations AND Shop Operations Group
         const targetJid = GROUPS.general.jid;
-        const shopGroupJid = body.target?.groupJid || body.targetGroupJid || meta.targetGroupJid;
+        const shopGroupJid = shopRouting.operations_jid || body.target?.groupJid || body.targetGroupJid || meta.targetGroupJid;
         const itemLines = items.map(i => `  • ${i.quantity || i.qty || 1}x *${i.name}*`).join("\n") || `  • ${body.summary || "Catalog Items"}`;
         const card =
           `🛍️ *[NEW STOREFRONT ORDER]* \`${orderId}\`\n` +
@@ -500,11 +518,32 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
             `• *Items:* ${itemSummary}\n\n` +
             `_Auto-paired via Edge Reconciliation Engine._`;
 
-          if (GROUPS?.general?.jid) {
-            safeSendMessage(GROUPS.general.jid, { text: verifyCard });
-          }
-          if (targetGroupJid && targetGroupJid !== GROUPS?.general?.jid) {
-            safeSendMessage(targetGroupJid, { text: verifyCard });
+          // Also resolve shop's operations_jid and management_jid from Supabase
+          let resolvedOpsJid = targetGroupJid;
+          let resolvedMgmtJid = null;
+          try {
+            const allShops = await getAllShops();
+            const qSlug = (body.tenantId || body.shopSlug || "").toLowerCase().trim();
+            const matched = allShops.find(s =>
+              (qSlug && s.slug?.toLowerCase() === qSlug) ||
+              (orderId && String(orderId).toUpperCase().includes(s.fulfillment_settings?.whatsapp_routing?.order_prefix || "__NONE__")) ||
+              s.fulfillment_settings?.whatsapp_routing?.operations_jid === targetGroupJid ||
+              s.fulfillment_settings?.whatsapp_routing?.community_jid === targetGroupJid
+            );
+            if (matched?.fulfillment_settings?.whatsapp_routing) {
+              resolvedOpsJid = matched.fulfillment_settings.whatsapp_routing.operations_jid || resolvedOpsJid;
+              resolvedMgmtJid = matched.fulfillment_settings.whatsapp_routing.management_jid || null;
+            }
+          } catch (e) {}
+
+          const verifyTargets = new Set([
+            GROUPS?.general?.jid || "120363429929736148@g.us",
+            GROUPS?.adminOversight?.jid || "120363415291701803@g.us",
+            resolvedOpsJid,
+            resolvedMgmtJid
+          ].filter(Boolean));
+          for (const vJid of verifyTargets) {
+            safeSendMessage(vJid, { text: verifyCard });
           }
         }
 
@@ -735,15 +774,51 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
         }
 
         // Commit station update in Supabase
-        await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${orders[0].id}`, {
+        const fullOrdRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${orders[0].id}`, {
           method: "PATCH",
           headers: {
             "apikey": SERVICE_KEY,
             "Authorization": `Bearer ${SERVICE_KEY}`,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
           },
           body: JSON.stringify({ status: normalizedTarget })
         });
+        const updatedRows = await fullOrdRes.json().catch(() => []);
+        const updatedOrd = updatedRows?.[0] || orders[0];
+
+        // Broadcast station advance to Shop Group AND Perpetual Main Group
+        if (safeSendMessage) {
+          try {
+            const allShops = await getAllShops();
+            const shop = allShops.find(s => s.id === updatedOrd.shop_id);
+            const routing = shop?.fulfillment_settings?.whatsapp_routing || {};
+            const advCard =
+              `🔄 *[ORDER STATION ADVANCED — ${(shop?.name || "STORE").toUpperCase()}]*\n` +
+              `• *Order:* #${(updatedOrd.id || "").slice(0, 8).toUpperCase()}\n` +
+              `• *Transition:* \`${currentStation.toUpperCase()}\` ➡️ *\`${normalizedTarget.toUpperCase()}\`*\n` +
+              `• *Customer:* ${updatedOrd.client_name || "Customer"}\n` +
+              `• *Total:* KES ${Number(updatedOrd.total_price || 0).toLocaleString()}\n` +
+              `• *Actor:* ${actor_name || "Merchant"}`;
+
+            const advTargets = new Set([
+              GROUPS?.general?.jid || "120363429929736148@g.us",
+              routing.operations_jid,
+              (normalizedTarget === "completed" || normalizedTarget === "cancelled" || normalizedTarget === "dispatched")
+                ? (GROUPS?.adminOversight?.jid || "120363415291701803@g.us")
+                : null,
+              (normalizedTarget === "completed" || normalizedTarget === "cancelled")
+                ? routing.management_jid
+                : null
+            ].filter(Boolean));
+
+            for (const tJid of advTargets) {
+              safeSendMessage(tJid, { text: advCard });
+            }
+          } catch (e) {
+            console.warn("[ADVANCE BROADCAST WARN]", e.message);
+          }
+        }
 
         res.writeHead(200);
         return res.end(JSON.stringify({

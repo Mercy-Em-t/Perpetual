@@ -1,0 +1,66 @@
+{
+  "shop_id": "d0aad5aa-4ae1-4644-8a0a-8c634b855ec0",
+  "shop_slug": "creative-galore",
+  "shop_name": "Creative Galore",
+  "industry": "crafts",
+  "order_prefix": "CRG",
+  "mpesa_till_number": "5758419",
+  "whatsapp_groups": {
+    "operations_jid": "120363429060534928@g.us",
+    "operations_name": "Creative Galore Operations",
+    "management_jid": "120363431644465504@g.us",
+    "management_name": "Creative Galore Admin",
+    "community_jid": "120363430166313076@g.us",
+    "community_name": "Creative Galore Community",
+    "community_invite_url": "https://chat.whatsapp.com/IvdTnrvAHoVCVMmQSfEhc3"
+  },
+  "stations": [
+    {
+      "id": "PENDING",
+      "label": "Order Received",
+      "command": null,
+      "role": "SYSTEM",
+      "notify_customer": false
+    },
+    {
+      "id": "PACKAGING",
+      "label": "Crafting & Packaging",
+      "command": "!pack",
+      "role": "OPERATIONS",
+      "notify_customer": false
+    },
+    {
+      "id": "VERIFIED",
+      "label": "Quality & Payment Verified",
+      "command": "!verify",
+      "role": "MANAGEMENT",
+      "notify_customer": true
+    },
+    {
+      "id": "IN_TRANSIT",
+      "label": "Dispatched with Rider",
+      "command": "!dispatch",
+      "role": "OPERATIONS",
+      "notify_customer": true
+    },
+    {
+      "id": "DELIVERED",
+      "label": "Delivered (Awaiting Customer Confirmation)",
+      "command": "!delivered",
+      "role": "RIDER",
+      "notify_customer": true
+    },
+    {
+      "id": "COMPLETED",
+      "label": "Completed & Confirmed",
+      "command": "!confirm",
+      "role": "CUSTOMER",
+      "notify_customer": true
+    }
+  ],
+  "dual_confirmation": {
+    "enabled": true,
+    "rider_station": "DELIVERED",
+    "customer_station": "COMPLETED"
+  }
+}

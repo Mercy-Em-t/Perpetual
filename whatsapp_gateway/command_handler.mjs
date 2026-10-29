@@ -20,7 +20,7 @@ import {
 
 export const KNOWN_COMMANDS = [
   "help", "status", "health", "orders", "order", "details",
-  "paid", "pack", "verify", "dispatch",
+  "paid", "pack", "verify", "dispatch", "delivered", "confirm",
   "summary", "sales", "pulse",
   "product", "item", "items", "catalog",
   "approve", "hide", "drafts", "policy",
@@ -446,9 +446,19 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
       const updatedOrder = updated?.[0] || o;
       const displayId = formatDisplayOrderId(updatedOrder);
 
-      await safeSendMessage(replyJid, {
-        text: `💳 *Payment Verified for ${shop.name}*\n• Order: *${displayId}*\n• Ref: \`${code}\`\n• Amount: KES ${Number(updatedOrder.total_price).toLocaleString()}\n• Status: *PAID & SETTLED* ✅\n• Next: \`!pack ${updatedOrder.id.slice(0, 8)}\``
-      });
+      const paidMsg = `💳 *Payment Verified — ${shop.name}*\n• Order: *${displayId}* (\`${updatedOrder.id.slice(0, 8)}\`)\n• Customer: ${updatedOrder.client_name || "Guest"}\n• Ref: \`${code}\`\n• Amount: *KES ${Number(updatedOrder.total_price).toLocaleString()}*\n• Status: *PAID & SETTLED* ✅\n• Verified By: @${callerName}\n• Next: \`!pack ${updatedOrder.id.slice(0, 8)}\``;
+      await safeSendMessage(replyJid, { text: paidMsg });
+
+      // Mirror payment update to Shop Management Group, Perpetua Main Floor Ops, and Admin Oversight
+      const routing = shop.fulfillment_settings?.whatsapp_routing || {};
+      const mirrorTargets = new Set([
+        routing.management_jid,
+        GROUPS?.general?.jid || "120363429929736148@g.us",
+        GROUPS?.adminOversight?.jid || "120363415291701803@g.us"
+      ].filter(jid => jid && jid !== replyJid));
+      for (const targetJid of mirrorTargets) {
+        await safeSendMessage(targetJid, { text: paidMsg });
+      }
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Payment update failed: ${err.message}` });
@@ -456,11 +466,11 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
     }
   }
 
-  // 6. Station Handoffs: !pack, !verify, !dispatch
-  if (command === "!pack" || command === "!verify" || command === "!dispatch") {
+  // 6. Station Handoffs: !pack, !verify, !dispatch, !delivered, !confirm
+  if (command === "!pack" || command === "!verify" || command === "!dispatch" || command === "!delivered" || command === "!confirm") {
     let orderId = args.trim();
-    let courier = "Unassigned Courier";
-    if (command === "!dispatch") {
+    let courier = "Assigned Rider";
+    if (command === "!dispatch" || command === "!delivered") {
       const dMatch = args.match(/^(\S+)(?:\s+(.+))?$/i);
       if (dMatch) {
         orderId = dMatch[1];
@@ -473,8 +483,14 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
       return;
     }
 
-    const nextStatus = command === "!pack" ? "PROCESSING" : command === "!verify" ? "PROCESSING" : "COMPLETED";
-    const statusLabel = command === "!pack" ? "PACKAGING (Boxed)" : command === "!verify" ? "QA VERIFIED" : "DISPATCHED (Fulfilled)";
+    const stationMap = {
+      "!pack":      { internal: "PACKAGING",  dbStatus: null,         label: "PACKAGING (Crafting & Boxed)" },
+      "!verify":    { internal: "VERIFIED",   dbStatus: null,         label: "QA & PAYMENT VERIFIED" },
+      "!dispatch":  { internal: "IN_TRANSIT", dbStatus: "dispatched", label: "DISPATCHED (In Transit with Rider)" },
+      "!delivered": { internal: "DELIVERED",  dbStatus: "dispatched", label: "DELIVERED BY RIDER (Awaiting Customer Confirmation)" },
+      "!confirm":   { internal: "COMPLETED",  dbStatus: "completed",  label: "COMPLETED (Dual Rider + Customer Confirmed)" }
+    };
+    const st = stationMap[command];
 
     try {
       const o = await resolveShopOrder(shop.id, orderId);
@@ -483,8 +499,8 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
         return;
       }
 
-      const patchPayload = { internal_status: nextStatus };
-      if (command === "!dispatch") patchPayload.status = "dispatched";
+      const patchPayload = { internal_status: st.internal };
+      if (st.dbStatus) patchPayload.status = st.dbStatus;
 
       const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${o.id}`, {
         method: "PATCH",
@@ -494,11 +510,30 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
       const updated = await patchRes.json();
       const updatedOrder = updated?.[0] || o;
       const displayId = formatDisplayOrderId(updatedOrder);
-      const courierLine = command === "!dispatch" ? `\n• Courier: *${courier}*` : "";
+      const courierLine = (command === "!dispatch" || command === "!delivered") ? `\n• Rider: *${courier}*` : "";
 
-      await safeSendMessage(replyJid, {
-        text: `📦 *Order Progressed — ${shop.name}*\n• Order: *${displayId}*\n• Station: *${statusLabel}* ✅${courierLine}\n• Actor: @${callerName}`
-      });
+      const progressMsg =
+        `📦 *Order Station Update — ${shop.name}*\n` +
+        `• Order: *${displayId}* (\`${updatedOrder.id.slice(0, 8)}\`)\n` +
+        `• Customer: ${updatedOrder.client_name || "Guest"} (${updatedOrder.client_phone || "N/A"})\n` +
+        `• Station: *${st.label}* ✅${courierLine}\n` +
+        `• Total: KES ${Number(updatedOrder.total_price || 0).toLocaleString()}\n` +
+        `• Actor: @${callerName}`;
+
+      await safeSendMessage(replyJid, { text: progressMsg });
+
+      // Mirror station progression to Perpetua Main Group (perpetua) & Shop Management
+      const routing = shop.fulfillment_settings?.whatsapp_routing || {};
+      const mirrorJids = new Set([
+        GROUPS?.general?.jid || "120363429929736148@g.us",
+        routing.operations_jid,
+        (command === "!dispatch" || command === "!delivered" || command === "!confirm") ? routing.management_jid : null,
+        (command === "!delivered" || command === "!confirm") ? (GROUPS?.adminOversight?.jid || "120363415291701803@g.us") : null
+      ].filter(jid => jid && jid !== replyJid));
+
+      for (const mJid of mirrorJids) {
+        await safeSendMessage(mJid, { text: progressMsg });
+      }
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Station update failed: ${err.message}` });
@@ -1313,6 +1348,111 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
     }
     await safeSendMessage(replyJid, { text: resolveCard });
     return;
+  }
+
+  // 5. Platform-Wide Order Queue & Inspection in Perpetual Main Group (!orders, !order, !details)
+  if (command === "!orders") {
+    try {
+      const shops = await getAllShops();
+      const shopMap = new Map(shops.map(s => [s.id, s]));
+      const cleanArg = (args || "").trim().toLowerCase();
+
+      let filterParam = "order=created_at.desc&limit=15";
+      const now = new Date();
+      const matchedShop = shops.find(s => s.slug?.toLowerCase() === cleanArg || s.name?.toLowerCase().includes(cleanArg));
+
+      if (cleanArg === "today") {
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        filterParam = `created_at=gte.${startOfDay}&${filterParam}`;
+      } else if (cleanArg === "pending") {
+        filterParam = `status=eq.pending&${filterParam}`;
+      } else if (cleanArg === "paid") {
+        filterParam = `status=eq.paid&${filterParam}`;
+      } else if (cleanArg === "dispatched" || cleanArg === "done") {
+        filterParam = `status=eq.dispatched&${filterParam}`;
+      } else if (matchedShop && cleanArg) {
+        filterParam = `shop_id=eq.${matchedShop.id}&${filterParam}`;
+      } else {
+        filterParam = `status=neq.cancelled&${filterParam}`;
+      }
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?${filterParam}&select=id,shop_id,total_price,status,internal_status,created_at,client_name,client_phone,mpesa_code,notes`, { headers: dbHdrs });
+      const orders = await res.json();
+
+      if (!orders || orders.length === 0) {
+        await safeSendMessage(replyJid, {
+          text: `📭 *Perpetua Platform Orders (${cleanArg || "active"}):*\nNo matching orders found.`
+        });
+        return;
+      }
+
+      let reply = `🏬 *Perpetua Platform Orders (${cleanArg.toUpperCase() || "RECENT"} — ${orders.length} shown)*\n\n`;
+      for (const o of orders) {
+        const sName = shopMap.get(o.shop_id)?.name || "Store";
+        const displayId = formatDisplayOrderId(o);
+        const st = (o.internal_status || o.status || "PENDING").toUpperCase();
+        reply += `• *${displayId}* (\`${o.id.slice(0, 8)}\`) — *${sName}*\n`;
+        reply += `  └ ${o.client_name || "Guest"} | *KES ${Number(o.total_price || 0).toLocaleString()}* | [${st}]\n`;
+      }
+      reply += `\n👉 _Inspect order:_ \`!order <id>\` | _Advance:_ \`!paid <id> <ref>\` | \`!dispatch <id> [rider]\``;
+      await safeSendMessage(replyJid, { text: reply });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Platform orders query failed: ${err.message}` });
+      return;
+    }
+  }
+
+  if (command === "!order" || command === "!details") {
+    const q = args.trim();
+    if (!q) {
+      await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!order <order_id>\`` });
+      return;
+    }
+    try {
+      const o = await resolveShopOrder(null, q);
+      if (!o) {
+        await safeSendMessage(replyJid, { text: `❌ Order \`${q}\` not found across platform stores.` });
+        return;
+      }
+      const shops = await getAllShops();
+      const shop = shops.find(s => s.id === o.shop_id) || { name: "Platform Store", id: o.shop_id };
+      const displayId = formatDisplayOrderId(o);
+      const reply =
+        `🔍 *[PLATFORM ORDER AUDIT — ${shop.name.toUpperCase()}]*\n` +
+        `╭────────────────────────────────────────╮\n` +
+        `  • Order: *${displayId}* (\`${o.id.slice(0, 8)}\`)\n` +
+        `  • Store: *${shop.name}*\n` +
+        `  • Status: *${(o.status || "PENDING").toUpperCase()}* (${o.internal_status || "STANDARD"})\n` +
+        `  • Customer: *${o.client_name || "Guest"}* (${o.client_phone || "No phone"})\n` +
+        `  • Total: *KES ${Number(o.total_price || 0).toLocaleString()}*\n` +
+        `  • M-Pesa Ref: \`${o.mpesa_code || "PENDING"}\`\n` +
+        `  • Created: ${new Date(o.created_at).toLocaleString()}\n` +
+        `╰────────────────────────────────────────╯\n` +
+        `_Actions:_ \`!paid ${o.id.slice(0, 8)} <ref>\` | \`!pack ${o.id.slice(0, 8)}\` | \`!dispatch ${o.id.slice(0, 8)} [rider]\``;
+      await safeSendMessage(replyJid, { text: reply });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Order lookup error: ${err.message}` });
+      return;
+    }
+  }
+
+  // 6. Allow Platform Floor Ops / Admin Oversight to execute !paid, !pack, !verify, !dispatch, !delivered, !confirm and mirror to the Shop's groups
+  if (command === "!paid" || command === "!pack" || command === "!verify" || command === "!dispatch" || command === "!delivered" || command === "!confirm") {
+    const firstToken = args.trim().split(/\s+/)[0];
+    if (!firstToken) {
+      await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`${command} <order_id>\`` });
+      return;
+    }
+    const o = await resolveShopOrder(null, firstToken);
+    if (!o) {
+      await safeSendMessage(replyJid, { text: `❌ Order \`${firstToken}\` not found across platform stores.` });
+      return;
+    }
+    const shops = await getAllShops();
+    const shop = shops.find(s => s.id === o.shop_id) || { id: o.shop_id, name: "Platform Store", fulfillment_settings: {} };
+    return await handleShopCommand(command, args, replyJid, senderId, callerName, { tier: "SHOP", role: "MANAGEMENT", shop }, safeSendMessage);
   }
 
   // Unknown
