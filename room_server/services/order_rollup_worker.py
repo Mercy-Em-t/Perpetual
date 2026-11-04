@@ -16,27 +16,32 @@ _running = False
 
 def _rollup_loop(interval_seconds=3600):
     """Executes periodic rollup and dispatches to Executive Oversight group."""
-    from datetime import datetime
+    from datetime import datetime, timezone, timedelta
+    eat_tz = timezone(timedelta(hours=3))
+
     while _running:
         try:
             summary = OrderManager.get_executive_summary()
-            total_orders = summary.get("total_orders", 0)
+            today_orders = summary.get("today_orders", 0)
+            in_flight = summary.get("in_flight", 0)
+            currency = summary.get("currency", "KES")
 
-            # Only dispatch pulse if there are orders or activity
-            if total_orders > 0:
+            # Only dispatch pulse if there are active in-flight orders or orders today
+            if today_orders > 0 or in_flight > 0:
                 st = summary["station_counts"]
-                now_str = datetime.now().strftime("%H:%M")
+                now_str = datetime.now(eat_tz).strftime("%H:%M")
                 pulse_card = (
                     f"📊 *Executive Shop Pulse — {now_str} Scheduled Rollup*\n"
                     f"╭────────────────────────────────────────╮\n"
-                    f"  • Total Revenue: ${summary['total_revenue']:,.2f}\n"
-                    f"  • Today's Orders: {summary['total_orders']}\n"
-                    f"  • In-Flight: {summary['in_flight']} | Completed: {summary['completed']}\n"
+                    f"  • Today's Revenue: {currency} {summary['today_revenue']:,.2f}\n"
+                    f"  • Today's Orders:  {today_orders}\n"
+                    f"  • In-Flight: {in_flight} | Today Completed: {summary['today_completed']}\n"
                     f"  • Stations Breakdown:\n"
-                    f"    ├─ 🟡 Pending:   {st['PENDING']}\n"
-                    f"    ├─ 💳 Paid:      {st['PAID']}\n"
-                    f"    ├─ 📦 Packing:   {st['PACKAGING']}\n"
-                    f"    └─ 🔍 QA Floor:  {st['VERIFIED']}\n"
+                    f"    ├─ 🟡 Pending:   {st.get('PENDING', 0)}\n"
+                    f"    ├─ 💳 Paid:      {st.get('PAID', 0)}\n"
+                    f"    ├─ 📦 Packing:   {st.get('PACKAGING', 0)}\n"
+                    f"    └─ 🔍 QA Floor:  {st.get('VERIFIED', 0)}\n"
+                    f"  • Cumulative Volume: {currency} {summary['total_revenue']:,.2f} ({summary['total_orders']} orders)\n"
                     f"╰────────────────────────────────────────╯\n"
                     f"_Automated container aggregation daemon._"
                 )

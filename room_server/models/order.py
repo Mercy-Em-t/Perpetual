@@ -261,13 +261,33 @@ class OrderManager:
         return results
 
     @staticmethod
-    def get_executive_summary() -> Dict[str, Any]:
-        """Calculates executive KPI rollups for the shop."""
+    def get_executive_summary(shop_slug: Optional[str] = None) -> Dict[str, Any]:
+        """Calculates executive KPI rollups for the shop or platform-wide."""
+        from datetime import datetime, timezone, timedelta
+        eat_tz = timezone(timedelta(hours=3))
+        now_eat = datetime.now(eat_tz)
+        today_start_ts = now_eat.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+
         conn = db.get_connection()
         cursor = conn.cursor()
 
-        # Total counts by station
-        cursor.execute("SELECT station, COUNT(*), SUM(total_amount) FROM orders GROUP BY station")
+        # Determine currency
+        currency = "KES"
+        if shop_slug:
+            shop_pipeline = PipelineManager.get_shop_pipeline(shop_slug)
+            if shop_pipeline and shop_pipeline.get("currency"):
+                currency = shop_pipeline.get("currency")
+        else:
+            cursor.execute("SELECT currency FROM orders WHERE currency IS NOT NULL AND currency != '' ORDER BY created_at DESC LIMIT 1")
+            row = cursor.fetchone()
+            if row and row[0]:
+                currency = row[0]
+
+        # Station aggregates (all-time)
+        if shop_slug:
+            cursor.execute("SELECT station, COUNT(*), SUM(total_amount) FROM orders WHERE shop_slug = ? GROUP BY station", (shop_slug,))
+        else:
+            cursor.execute("SELECT station, COUNT(*), SUM(total_amount) FROM orders GROUP BY station")
         rows = cursor.fetchall()
 
         station_counts = {s: 0 for s in OrderManager.VALID_STATIONS}
@@ -282,22 +302,77 @@ class OrderManager:
             if st in station_counts:
                 station_counts[st] = cnt
                 station_revenue[st] = rev
+            else:
+                station_counts[st] = cnt
+                station_revenue[st] = rev
             total_orders += cnt
             if st != "CANCELLED":
                 total_revenue += rev
 
+        # Today's metrics (created since midnight EAT)
+        if shop_slug:
+            cursor.execute(
+                "SELECT COUNT(*), SUM(total_amount) FROM orders WHERE created_at >= ? AND station != 'CANCELLED' AND shop_slug = ?",
+                (today_start_ts, shop_slug)
+            )
+        else:
+            cursor.execute(
+                "SELECT COUNT(*), SUM(total_amount) FROM orders WHERE created_at >= ? AND station != 'CANCELLED'",
+                (today_start_ts,)
+            )
+        today_row = cursor.fetchone()
+        today_orders = today_row[0] if today_row else 0
+        today_revenue = (today_row[1] or 0.0) if today_row else 0.0
+
+        # Today completed
+        if shop_slug:
+            cursor.execute(
+                "SELECT COUNT(*) FROM orders WHERE updated_at >= ? AND station IN ('DISPATCHED', 'COMPLETED', 'DELIVERED') AND shop_slug = ?",
+                (today_start_ts, shop_slug)
+            )
+        else:
+            cursor.execute(
+                "SELECT COUNT(*) FROM orders WHERE updated_at >= ? AND station IN ('DISPATCHED', 'COMPLETED', 'DELIVERED')",
+                (today_start_ts,)
+            )
+        today_completed_row = cursor.fetchone()
+        today_completed = today_completed_row[0] if today_completed_row else 0
+
+        # In-flight vs Completed counts
+        in_flight = sum(
+            cnt for st, cnt in station_counts.items()
+            if st not in ("DISPATCHED", "COMPLETED", "DELIVERED", "CANCELLED")
+        )
+        completed = sum(
+            station_counts.get(st, 0)
+            for st in ("DISPATCHED", "COMPLETED", "DELIVERED")
+        )
+
         # Fetch recent completed
-        cursor.execute("SELECT order_id, customer_name, total_amount, updated_at FROM orders WHERE station = 'DISPATCHED' ORDER BY updated_at DESC LIMIT 5")
+        if shop_slug:
+            cursor.execute(
+                "SELECT order_id, customer_name, total_amount, updated_at FROM orders WHERE station IN ('DISPATCHED', 'COMPLETED', 'DELIVERED') AND shop_slug = ? ORDER BY updated_at DESC LIMIT 5",
+                (shop_slug,)
+            )
+        else:
+            cursor.execute(
+                "SELECT order_id, customer_name, total_amount, updated_at FROM orders WHERE station IN ('DISPATCHED', 'COMPLETED', 'DELIVERED') ORDER BY updated_at DESC LIMIT 5"
+            )
         recent_dispatched = [dict(r) for r in cursor.fetchall()]
 
         conn.close()
 
         return {
+            "currency": currency,
+            "today_orders": today_orders,
+            "today_revenue": round(today_revenue, 2),
+            "today_completed": today_completed,
             "total_orders": total_orders,
             "total_revenue": round(total_revenue, 2),
             "station_counts": station_counts,
             "station_revenue": station_revenue,
-            "in_flight": station_counts["PENDING"] + station_counts["PAID"] + station_counts["PACKAGING"] + station_counts["VERIFIED"],
-            "completed": station_counts["DISPATCHED"],
-            "recent_dispatched": recent_dispatched
+            "in_flight": in_flight,
+            "completed": completed,
+            "recent_dispatched": recent_dispatched,
+            "shop_slug": shop_slug
         }

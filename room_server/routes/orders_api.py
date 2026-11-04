@@ -166,28 +166,41 @@ def get_order(order_id):
 
 @orders_bp.route("/summary", methods=["GET"])
 def get_summary():
-    """Returns real-time executive KPI rollups."""
-    summary = OrderManager.get_executive_summary()
+    """Returns real-time executive KPI rollups with optional shop_slug filter."""
+    shop_slug = request.args.get("shop_slug")
+    summary = OrderManager.get_executive_summary(shop_slug=shop_slug)
     return jsonify({"summary": summary})
 
 
 @orders_bp.route("/pulse", methods=["POST"])
 def trigger_executive_pulse():
     """Dispatches on-demand executive pulse card to the Admin Oversight Group."""
-    summary = OrderManager.get_executive_summary()
+    from datetime import datetime, timezone, timedelta
+    eat_tz = timezone(timedelta(hours=3))
+
+    data = request.get_json(silent=True) or {}
+    shop_slug = request.args.get("shop_slug") or data.get("shop_slug")
+    summary = OrderManager.get_executive_summary(shop_slug=shop_slug)
     st = summary["station_counts"]
+    currency = summary.get("currency", "KES")
+    now_str = datetime.now(eat_tz).strftime("%H:%M")
+
+    header = f"📊 *Executive Shop Pulse — {now_str} Real-Time Rollup*"
+    if shop_slug:
+        header = f"📊 *Executive Pulse [{shop_slug}] — {now_str} Real-Time Rollup*"
 
     pulse_card = (
-        f"📊 *Executive Shop Pulse — Real-Time Rollup*\n"
+        f"{header}\n"
         f"╭────────────────────────────────────────╮\n"
-        f"  • Total Revenue: ${summary['total_revenue']:,.2f}\n"
-        f"  • Total Orders Today: {summary['total_orders']}\n"
-        f"  • Active In-Flight: {summary['in_flight']} orders\n"
-        f"    ├─ 🟡 Pending Pay: {st['PENDING']}\n"
-        f"    ├─ 💳 Paid/Intake: {st['PAID']}\n"
-        f"    ├─ 📦 Packaging:   {st['PACKAGING']}\n"
-        f"    └─ 🔍 Quality QA:  {st['VERIFIED']}\n"
-        f"  • Completed/Dispatched: {summary['completed']}\n"
+        f"  • Today's Revenue: {currency} {summary['today_revenue']:,.2f}\n"
+        f"  • Today's Orders:  {summary['today_orders']}\n"
+        f"  • In-Flight:       {summary['in_flight']} | Completed: {summary['completed']}\n"
+        f"  • Stations Breakdown:\n"
+        f"    ├─ 🟡 Pending Pay: {st.get('PENDING', 0)}\n"
+        f"    ├─ 💳 Paid/Intake: {st.get('PAID', 0)}\n"
+        f"    ├─ 📦 Packaging:   {st.get('PACKAGING', 0)}\n"
+        f"    └─ 🔍 Quality QA:  {st.get('VERIFIED', 0)}\n"
+        f"  • Cumulative Volume: {currency} {summary['total_revenue']:,.2f} ({summary['total_orders']} total)\n"
         f"╰────────────────────────────────────────╯\n"
         f"_Floor stations operating with 0 dropped frames._"
     )
