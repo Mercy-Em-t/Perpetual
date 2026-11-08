@@ -1,0 +1,24 @@
+{
+  "app_name": "Savannah M-Pesa Till & Personal Financial Reporter Rule",
+  "recommended_play_store_app": "SMS Forwarder (by Bogdano / Springermon)",
+  "filter": {
+    "senders": ["MPESA", "M-PESA", "DTB", "Safaricom", "Okoa Jahazi"],
+    "keywords": ["Confirmed", "Ksh", "KES", "KSH", "OKOA JAHAZI", "transferred", "purchased", "withdrawn", "Withdraw"],
+    "sim_slot": "ANY (Till 5758419 + Personal Safaricom)"
+  },
+  "webhook": {
+    "method": "POST",
+    "public_cloud_https_url": "https://updatedtms-whitelabel-core.vercel.app/api/till/receipt",
+    "pavilion_tailscale_url": "http://100.73.175.118:8085/api/till/receipt",
+    "pavilion_magicdns_url": "http://localhost-0:8085/api/till/receipt",
+    "offline_retry_policy": "Store locally on phone when offline; auto-flush when Wi-Fi or 4G mobile data connects",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "json_body_template": {
+      "from": "%from%",
+      "sim": "%sim%",
+      "text": "%text%"
+    }
+  }
+}
