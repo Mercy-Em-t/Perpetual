@@ -67,6 +67,13 @@ export const GROUPS = {
     welcome: `🌐 *Perpetua Platform Community Active*`,
     description: `🌐 Perpetua Platform Community`
   },
+  onboardingRequests: {
+    name: "Perpetua - New Signups & Onboarding",
+    role: "onboarding",
+    jid: "120363415523175268@g.us",
+    welcome: `📋 *Perpetua - New Signups & Onboarding Channel Active*`,
+    description: `📋 Dedicated channel for new merchant signups and onboarding requests`
+  },
   adminOversight: {
     name: "Perpetua - Admin Oversight",
     role: "executive",
