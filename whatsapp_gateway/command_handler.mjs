@@ -21,7 +21,7 @@ import {
 export const KNOWN_COMMANDS = [
   "help", "status", "health", "orders", "order", "details",
   "paid", "pack", "verify", "dispatch", "delivered", "confirm",
-  "summary", "sales", "pulse",
+  "summary", "sales", "pulse", "eod", "reconcile", "closure",
   "product", "item", "items", "catalog",
   "approve", "hide", "drafts", "policy",
   "resurrect", "revive", "reorder", "repeat", "buyagain",
@@ -567,6 +567,34 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Failed to calculate summary: ${err.message}` });
+      return;
+    }
+  }
+
+  // 7b. End-of-Day (EOD) Automated Register Reconciliation: !eod, !reconcile, !closure
+  if (command === "!eod" || command === "!reconcile" || command === "!closure") {
+    try {
+      const { generateShopEODReport, runFullDualEODReconciliation } = await import("./eod_reconciler.mjs");
+      const cleanArgs = args.trim().toLowerCase();
+      if (cleanArgs === "dispatch" || cleanArgs === "all") {
+        if (!isMgmt) {
+          await safeSendMessage(replyJid, { text: `🔒 Platform-wide EOD dispatch is restricted to Management.` });
+          return;
+        }
+        await safeSendMessage(replyJid, { text: `🚀 *Executing Dual Multi-Tenant EOD Dispatch...*` });
+        const result = await runFullDualEODReconciliation({ dispatch: true, sendFn: safeSendMessage });
+        await safeSendMessage(replyJid, {
+          text: `✅ *Dual EOD Dispatch Complete:* Reconciled ${result.shopReports.length} active stores. Platform summary posted to executive channels.`
+        });
+        return;
+      }
+
+      const targetSlug = cleanArgs || shop.slug || "test-shop";
+      const report = await generateShopEODReport(targetSlug);
+      await safeSendMessage(replyJid, { text: report.formattedWhatsAppMessage });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Failed to generate live EOD reconciliation: ${err.message}` });
       return;
     }
   }
@@ -1298,6 +1326,48 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Failed to aggregate platform rollup: ${err.message}` });
+      return;
+    }
+  }
+
+  // 3b. End-of-Day (EOD) Automated Register Reconciliation: !eod, !reconcile, !closure
+  if (command === "!eod" || command === "!reconcile" || command === "!closure") {
+    try {
+      const {
+        generateShopEODReport,
+        generatePlatformEODReport,
+        runFullDualEODReconciliation
+      } = await import("./eod_reconciler.mjs");
+
+      const cleanArgs = args.trim().toLowerCase();
+      if (cleanArgs === "dispatch" || cleanArgs === "broadcast" || cleanArgs === "all") {
+        await safeSendMessage(replyJid, { text: `🚀 *Executing Dual Multi-Tenant EOD Dispatch...*` });
+        const result = await runFullDualEODReconciliation({
+          dispatch: true,
+          sendFn: safeSendMessage
+        });
+        const summaryMsg =
+          `✅ *Dual EOD Dispatch Completed*\n` +
+          `• Platform GMV: KES ${result.platformReport.totalPlatformPaidGmv.toLocaleString()}\n` +
+          `• Stores Reconciled: ${result.shopReports.length}\n` +
+          `• Platform Channel: ${result.dispatchResults.platform.dispatched ? "Delivered" : "Pending"}\n` +
+          `• Individual Merchant Registers: ${result.dispatchResults.shops.filter(s => s.success).length}/${result.dispatchResults.shops.length} delivered`;
+        await safeSendMessage(replyJid, { text: summaryMsg });
+        return;
+      }
+
+      if (cleanArgs && cleanArgs !== "platform") {
+        const report = await generateShopEODReport(cleanArgs);
+        await safeSendMessage(replyJid, { text: report.formattedWhatsAppMessage });
+        return;
+      }
+
+      // Default in System Groups: Platform Consolidated Executive Rollup
+      const report = await generatePlatformEODReport();
+      await safeSendMessage(replyJid, { text: report.formattedWhatsAppMessage });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Failed to execute EOD reconciliation: ${err.message}` });
       return;
     }
   }

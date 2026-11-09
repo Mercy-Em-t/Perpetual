@@ -384,6 +384,70 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
       }
     }
 
+    // POST /api/eod-report (Trigger Live End-of-Day Multi-Tenant Register Reconciliation)
+    if ((req.method === "POST" || req.method === "GET") && parsedUrl.pathname === "/api/eod-report") {
+      try {
+        let body = {};
+        if (req.method === "POST") {
+          try { body = await parseJsonBody(req); } catch (ignored) {}
+        }
+        const mode = body.mode || parsedUrl.searchParams.get("mode") || (body.shop || parsedUrl.searchParams.get("shop") ? "shop" : "dual");
+        const shopSlug = body.shop || parsedUrl.searchParams.get("shop") || "test-shop";
+        const sendToWhatsApp = body.dispatch !== false && parsedUrl.searchParams.get("dispatch") !== "false";
+
+        const {
+          generateShopEODReport,
+          generatePlatformEODReport,
+          runFullDualEODReconciliation
+        } = await import("./eod_reconciler.mjs");
+
+        if (mode === "platform") {
+          const report = await generatePlatformEODReport();
+          let dispatched = false;
+          if (sendToWhatsApp) {
+            const platformJid = GROUPS.adminOversight?.jid || "120363415291701803@g.us";
+            await safeSendMessage(platformJid, { text: report.formattedWhatsAppMessage });
+            dispatched = true;
+          }
+          res.writeHead(200);
+          return res.end(JSON.stringify({ success: true, mode: "platform", report, dispatched }, null, 2));
+        }
+
+        if (mode === "shop") {
+          const report = await generateShopEODReport(shopSlug);
+          let dispatched = false;
+          if (sendToWhatsApp) {
+            const targetJid = report.targetJid || GROUPS.adminOversight?.jid;
+            if (targetJid) {
+              await safeSendMessage(targetJid, { text: report.formattedWhatsAppMessage });
+              dispatched = true;
+            }
+          }
+          res.writeHead(200);
+          return res.end(JSON.stringify({ success: true, mode: "shop", shop: shopSlug, report, dispatched }, null, 2));
+        }
+
+        // Default: Full Dual Reconciliation (Each active shop receives their report + platform rollup to community)
+        const result = await runFullDualEODReconciliation({
+          dispatch: sendToWhatsApp,
+          sendFn: safeSendMessage
+        });
+
+        res.writeHead(200);
+        return res.end(JSON.stringify({
+          success: true,
+          mode: "dual",
+          platformReport: result.platformReport,
+          activeShopsCount: result.shopReports.length,
+          shopReports: result.shopReports,
+          dispatchResults: result.dispatchResults
+        }, null, 2));
+      } catch (err) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    }
+
     // POST /api/broadcast-task (General / Operations)
     if (req.method === "POST" && parsedUrl.pathname === "/api/broadcast-task") {
       try {
