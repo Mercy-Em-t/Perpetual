@@ -448,6 +448,25 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
       }
     }
 
+    // POST /api/notify-customer-order (Instant WhatsApp Confirmation to Customer Phone)
+    if (req.method === "POST" && parsedUrl.pathname === "/api/notify-customer-order") {
+      try {
+        const body = await parseJsonBody(req);
+        const orderId = body.order_id || body.orderId || body.id;
+        if (!orderId) {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: "Missing order_id" }));
+        }
+        const { sendCustomerOrderConfirmation } = await import("./customer_notifier.mjs");
+        const result = await sendCustomerOrderConfirmation(orderId, safeSendMessage);
+        res.writeHead(200);
+        return res.end(JSON.stringify({ success: true, result }));
+      } catch (err) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    }
+
     // POST /api/broadcast-task (General / Operations)
     if (req.method === "POST" && parsedUrl.pathname === "/api/broadcast-task") {
       try {
@@ -1573,6 +1592,15 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
             safeSendMessage(t, { text: card });
           }
           addTrace("STEP 7 (WHATSAPP BROADCAST)", `Dispatched AUTO-SETTLED card for #${shortOrder} to ${targets.size} WhatsApp group(s)`);
+          
+          // Instant Customer Confirmation to Personal WhatsApp
+          try {
+            const { sendCustomerOrderConfirmation } = await import("./customer_notifier.mjs");
+            sendCustomerOrderConfirmation(matchedOrder, safeSendMessage);
+            addTrace("STEP 7B (CUSTOMER WHATSAPP CONFIRMATION)", `Triggered instant confirmation to customer ${matchedOrder.client_phone}`);
+          } catch (custErr) {
+            console.warn("[CUSTOMER CONFIRMATION ERROR]", custErr.message);
+          }
         }
 
         const out = {

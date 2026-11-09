@@ -152,6 +152,12 @@ async function startWhatsAppBot() {
       botJid = sock.user?.id ? sock.user.id.split(":")[0] + "@s.whatsapp.net" : null;
       console.log(`[WHATSAPP] Connected successfully as: ${botJid}`);
       await setupTargetGroups();
+      try {
+        const { startRealtimePaymentSentinel } = await import("./customer_notifier.mjs");
+        startRealtimePaymentSentinel(safeSendMessage);
+      } catch (sentinelErr) {
+        console.warn("[SENTINEL INIT WARN]", sentinelErr.message);
+      }
     }
   });
 
