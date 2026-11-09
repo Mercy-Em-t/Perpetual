@@ -327,10 +327,10 @@ export async function runFullDualEODReconciliation({ targetDate = new Date(), di
 
   // 3. Optional Live WhatsApp Dispatch
   if (dispatch && typeof sendFn === "function") {
-    // A. Dispatch Platform Report to Executive Oversight & Perpetua Community
+    // A. Dispatch Platform Report to Dedicated Register & Audit Group and Admin Oversight
     const targetPlatformJids = [
-      GROUPS?.adminOversight?.jid || "120363415291701803@g.us",
-      GROUPS?.community?.jid || "120363429056719427@g.us"
+      GROUPS?.dailyRegisterAudit?.jid || "120363414989313710@g.us",
+      GROUPS?.adminOversight?.jid || "120363415291701803@g.us"
     ];
 
     for (const jid of targetPlatformJids) {
