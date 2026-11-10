@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#0284c7" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <title>Mercy Personal Finance App — M-Pesa, DTB, Okoa & Budget Intelligence</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card: #131c2e;
+      --card-alt: #0f172a;
+      --border: #1e293b;
+      --border-light: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --primary: #0284c7;
+      --green: #34d399;
+      --red: #f87171;
+      --amber: #fbbf24;
+      --orange: #fb923c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 16px;
+      max-width: 1120px;
+      margin-inline: auto;
+      padding-bottom: 64px;
+    }
+    /* Top Header */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 16px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand-row { display: flex; align-items: center; gap: 12px; }
+    .brand-icon { width: 46px; height: 46px; border-radius: 12px; box-shadow: 0 4px 14px rgba(2,132,199,0.35); }
+    .badge-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #064e3b;
+      color: #6ee7b7;
+      letter-spacing: 0.03em;
+    }
+    .badge.offline { background: #7c2d12; color: #fed7aa; }
+    h1 { font-size: 21px; color: var(--accent); margin: 4px 0 2px 0; font-weight: 800; }
+    h2 { font-size: 15px; color: #e2e8f0; margin: 0 0 12px 0; display: flex; justify-content: space-between; align-items: center; }
+    p.sub { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+    /* Action Buttons Bar */
+    .action-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button, .btn {
+      background: var(--primary);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 9px 14px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 12.5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.1s, background 0.15s;
+      text-decoration: none;
+    }
+    button:hover, .btn:hover { filter: brightness(1.1); }
+    button:active { transform: scale(0.98); }
+    button.sec, .btn.sec { background: #1e293b; color: #e2e8f0; border-color: #334155; }
+    button.emerald { background: #059669; }
+    button.amber { background: #d97706; }
+
+    /* Time Filter Pills & Category Filter */
+    .filter-strip {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 16px;
+      background: var(--card-alt);
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      border-radius: 12px;
+    }
+    .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pill {
+      background: #1e293b;
+      color: var(--muted);
+      border: 1px solid #334155;
+      padding: 6px 13px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .pill.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--accent);
+      box-shadow: 0 0 12px rgba(56,189,248,0.3);
+    }
+    select.filter-select {
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid #334155;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+
+    /* Top 5 Summary KPI Cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .kpi {
+      background: linear-gradient(145deg, #162033, #0f172a);
+      border: 1px solid var(--border-light);
+      border-radius: 14px;
+      padding: 15px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+    .kpi-val { font-size: 22px; font-weight: 800; margin-top: 6px; color: #f8fafc; }
+    .kpi-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
+    .outflow { color: var(--red); }
+    .inflow { color: var(--green); }
+    .loan { color: var(--amber); }
+    .fee-color { color: var(--orange); }
+
+    /* Drawers (Paste SMS / Budget Manager) */
+    .drawer {
+      display: none;
+      background: var(--card);
+      border: 1px solid var(--accent);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    }
+    .drawer.open { display: block; }
+    textarea {
+      width: 100%;
+      background: #090d16;
+      color: #fff;
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 13px;
+      min-height: 86px;
+      margin-top: 8px;
+      font-family: inherit;
+    }
+
+    /* Main 2-Column Layout */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border-light);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+
+    /* Category Breakdown & Budget Progress Bars */
+    .bar-row {
+      margin-bottom: 14px;
+      padding: 10px 12px;
+      background: var(--card-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .bar-row:hover { border-color: var(--accent); }
+    .bar-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: #e2e8f0;
+      gap: 8px;
+    }
+    .bar-track {
+      width: 100%;
+      height: 8px;
+      background: #090d16;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 5px;
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #0284c7, #38bdf8);
+      border-radius: 999px;
+    }
+    .bar-fill.warn { background: linear-gradient(90deg, #d97706, #fbbf24); }
+    .bar-fill.over { background: linear-gradient(90deg, #dc2626, #f87171); }
+    .budget-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .budget-badge {
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 10px;
+    }
+    .budget-badge.ok { background: rgba(52,211,153,0.15); color: #34d399; }
+    .budget-badge.warn { background: rgba(251,191,36,0.2); color: #fbbf24; }
+    .budget-badge.over { background: rgba(248,113,113,0.2); color: #f87171; }
+
+    /* Top Payees Leaderboard */
+    .payee-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 9px 4px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .payee-row:last-child { border-bottom: none; }
+    .rank-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      background: #1e293b;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 800;
+      margin-right: 8px;
+    }
+
+    /* Budget Editor Grid */
+    .budget-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .budget-input-item {
+      background: var(--card-alt);
+      border: 1px solid var(--border);
+      padding: 10px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+    }
+    .budget-input-item input {
+      width: 95px;
+      background: #090d16;
+      color: #fff;
+      border: 1px solid var(--border-light);
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    /* Transaction Ledger Rows */
+    .tx-controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .search-box {
+      flex: 1;
+      min-width: 200px;
+      background: var(--card-alt);
+      color: #fff;
+      border: 1px solid var(--border-light);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .tx-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 13px;
+      background: var(--card-alt);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 9px;
+      flex-wrap: wrap;
+    }
+    .tx-title { font-weight: 700; font-size: 14px; color: #f8fafc; }
+    .tx-meta { font-size: 11.5px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+    .tx-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .cat-select {
+      background: #1e293b;
+      color: var(--accent);
+      border: 1px solid #334155;
+      border-radius: 7px;
+      padding: 4px 8px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .note-btn {
+      background: transparent;
+      border: 1px dashed #475569;
+      color: #cbd5e1;
+      padding: 3px 8px;
+      font-size: 11px;
+      border-radius: 6px;
+      margin: 0;
+    }
+    .tx-amt { font-weight: 800; font-size: 15.5px; white-space: nowrap; text-align: right; }
+    .toast {
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      background: #0284c7;
+      color: #fff;
+      padding: 11px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <div class="top-bar">
+    <div class="brand-row">
+      <img src="/icon.svg" alt="Mercy Finance" class="brand-icon" />
+      <div>
+        <div class="badge-row">
+          <span class="badge" id="connBadge">🟢 LIVE SYNC ACTIVE (:5180 & :5174)</span>
+          <span class="badge" style="background:#1e3a8a;color:#93c5fd;">📱 PWA OFFLINE-READY</span>
+        </div>
+        <h1>Mercy's Personal Finance & M-Pesa Analyzer</h1>
+        <p class="sub">Standalone Personal Ledger • M-Pesa, DTB, KCB, Safaricom Bundles, Okoa Jahazi & Monthly Budgets</p>
+      </div>
+    </div>
+
+    <div class="action-bar">
+      <button class="emerald" onclick="syncFromPhone()" id="syncBtn">📱 Sync From Redmi Note 12</button>
+      <button onclick="toggleDrawer('smsDrawer')">➕ Paste / Analyze SMS</button>
+      <button class="amber" onclick="toggleDrawer('budgetDrawer')">🎯 Monthly Budgets</button>
+      <button class="sec" onclick="exportCsv()">📥 Export CSV</button>
+      <button class="sec" id="installPwaBtn" style="display:none;" onclick="installPwa()">📲 Install App</button>
+    </div>
+  </div>
+
+  <!-- Time Filter Pills & Category Filter -->
+  <div class="filter-strip">
+    <div class="pills">
+      <button class="pill active" data-period="all" onclick="setPeriod('all')">All Time</button>
+      <button class="pill" data-period="month" onclick="setPeriod('month')">This Month</button>
+      <button class="pill" data-period="week" onclick="setPeriod('week')">This Week</button>
+      <button class="pill" data-period="today" onclick="setPeriod('today')">Today</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--muted);font-weight:600;">Category Filter:</span>
+      <select id="categoryFilter" class="filter-select" onchange="setCategoryFilter(this.value)">
+        <option value="all">All Categories</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Drawer 1: Paste / Analyze Single or Bulk SMS -->
+  <div class="drawer" id="smsDrawer">
+    <h2>
+      <span>➕ Paste or Test Any M-Pesa, DTB, KCB, Safaricom or Okoa Jahazi SMS</span>
+      <button class="sec" style="padding:4px 10px;margin:0;" onclick="toggleDrawer('smsDrawer')">✕ Close</button>
+    </h2>
+    <p class="sub">Works online and offline! Paste one or multiple SMS messages below to parse, categorize, and add to your ledger:</p>
+    <textarea id="manualSms" placeholder="Example: UK7DC1IMIU Confirmed. Ksh450.00 paid to NAIVAS SUPERMARKET. on 7/11/26 at 6:15 PM. New M-PESA balance is Ksh6,451.65. Transaction cost, Ksh0.00."></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button onclick="ingestSms()">🔍 Parse & Add to Ledger</button>
+      <button class="sec" onclick="fillSampleSms()">✨ Load Sample SMS</button>
+    </div>
+  </div>
+
+  <!-- Drawer 2: Monthly Category Budget Manager -->
+  <div class="drawer" id="budgetDrawer">
+    <h2>
+      <span>🎯 Monthly Category Budget Limits (KES) — Alerts at 80% & 100%</span>
+      <button class="sec" style="padding:4px 10px;margin:0;" onclick="toggleDrawer('budgetDrawer')">✕ Close</button>
+    </h2>
+    <p class="sub">Set your target monthly spending cap per category. Progress bars turn amber at 80% and red at 100%.</p>
+    <div class="budget-grid" id="budgetInputs"></div>
+    <div style="margin-top:12px;display:flex;gap:8px;">
+      <button class="emerald" onclick="saveBudgetLimits()">💾 Save Monthly Budgets</button>
+    </div>
+  </div>
+
+  <!-- Top 5 Summary KPI Cards -->
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-label">Total Outflow (Spent)</div>
+      <div class="kpi-val outflow" id="kpiSpent">KES 0</div>
+      <div class="kpi-sub" id="kpiCount">0 transactions</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total Personal Inflow</div>
+      <div class="kpi-val inflow" id="kpiInflow">KES 0</div>
+      <div class="kpi-sub" id="kpiNet">Net Cashflow: KES 0</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Latest M-Pesa Balance</div>
+      <div class="kpi-val" style="color:var(--accent);" id="kpiBal">--</div>
+      <div class="kpi-sub">From most recent M-Pesa SMS</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Unpaid Okoa Jahazi Debt</div>
+      <div class="kpi-val loan" id="kpiOkoa">KES 0</div>
+      <div class="kpi-sub">Live Safaricom Okoa balance</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Fees & Okoa Interest Lost</div>
+      <div class="kpi-val fee-color" id="kpiFees">KES 0</div>
+      <div class="kpi-sub">M-Pesa charges + Okoa fees</div>
+    </div>
+  </div>
+
+  <!-- Category Breakdown + Top Payees -->
+  <div class="grid-2">
+    <div class="card">
+      <h2>
+        <span>📊 Spending Breakdown & Monthly Budget Progress</span>
+        <span style="font-size:11px;color:var(--muted);font-weight:500;">Click a category to filter</span>
+      </h2>
+      <div id="catList">Loading categories...</div>
+    </div>
+    <div class="card">
+      <h2>
+        <span>🏆 Where My Money Went (Top Payees)</span>
+        <span style="font-size:11px;color:var(--muted);font-weight:500;" id="payeePeriodLabel">All Time</span>
+      </h2>
+      <div id="payeeList">Loading payees...</div>
+    </div>
+  </div>
+
+  <!-- Categorized Transaction Ledger with 1-Click Re-assignment -->
+  <div class="card">
+    <h2>
+      <span>📜 Categorized Personal Transaction Ledger</span>
+      <span style="font-size:12px;color:var(--accent);" id="ledgerShowingCount">0 records</span>
+    </h2>
+    <div class="tx-controls">
+      <input type="text" id="searchInput" class="search-box" placeholder="🔎 Search by payee, ref code (e.g. UK7...), category, or note..." oninput="renderTransactions()" />
+    </div>
+    <div id="txList">Loading ledger...</div>
+  </div>
+
+  <div class="toast" id="toastMsg"></div>
+
+  <script>
+    const STORAGE_KEY_REPORT = "mercy_finance_cached_report_v1";
+    const STORAGE_KEY_OFFLINE_QUEUE = "mercy_finance_offline_sms_queue_v1";
+
+    const DEFAULT_CATEGORIES = [
+      "🛒 Groceries & Supermarkets",
+      "🍽️ Food, Cafe & Dining",
+      "🚕 Transport & Fuel",
+      "💡 Utilities, Wi-Fi & Bills",
+      "🏥 Health & Pharmacy",
+      "📶 Airtime, Data & Okoa",
+      "🎨 Business & Atelier Supplies",
+      "🏧 Cash Withdrawals",
+      "🏦 Bank Transfers (DTB)",
+      "🤝 People & Family Transfers",
+      "🛍️ Merchants & Till Purchases",
+      "💰 Personal Income & Transfers In",
+      "📌 General Expenses"
+    ];
+
+    let currentPeriod = "all";
+    let currentCategory = "all";
+    let latestReport = null;
+    let deferredInstallPrompt = null;
+
+    // Register Service Worker for offline PWA support
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      });
+    }
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      document.getElementById("installPwaBtn").style.display = "inline-flex";
+    });
+
+    async function installPwa() {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      document.getElementById("installPwaBtn").style.display = "none";
+    }
+
+    function showToast(msg, bg = "#0284c7") {
+      const el = document.getElementById("toastMsg");
+      el.textContent = msg;
+      el.style.background = bg;
+      el.style.display = "block";
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => { el.style.display = "none"; }, 3600);
+    }
+
+    function toggleDrawer(id) {
+      const el = document.getElementById(id);
+      el.classList.toggle("open");
+    }
+
+    function setPeriod(period) {
+      currentPeriod = period;
+      document.querySelectorAll(".pill").forEach((btn) => {
+        btn.classList.toggle("active", btn.getAttribute("data-period") === period);
+      });
+      const labels = { all: "All Time", month: "This Month", week: "This Week", today: "Today" };
+      document.getElementById("payeePeriodLabel").textContent = labels[period] || "All Time";
+      loadReport();
+    }
+
+    function setCategoryFilter(cat) {
+      currentCategory = cat || "all";
+      document.getElementById("categoryFilter").value = currentCategory;
+      loadReport();
+    }
+
+    // Client-side offline SMS parser so the user can parse pasted SMS even without Wi-Fi
+    function parseSmsClientOffline(rawText) {
+      const text = String(rawText || "").trim();
+      if (!text) return null;
+      const codeMatch = text.match(/\b([A-Z0-9]{10})\b\s*Confirmed/i);
+      const amtMatch = text.match(/(?:Ksh\.?|KES\.?|Sh\.?)\s*([0-9,]+(?:\.[0-9]{2})?)/i);
+      const amount = amtMatch ? parseFloat(amtMatch[1].replace(/,/g, "")) : 0;
+      const isInflow = /You\s+have\s+received/i.test(text) && !/The\s+fee\s+is/i.test(text);
+      return {
+        is_business_till: false,
+        ref_code: codeMatch ? codeMatch[1].toUpperCase() : "LOCAL-" + Date.now(),
+        direction: isInflow ? "INFLOW" : "OUTFLOW",
+        tx_type: isInflow ? "PERSONAL_INFLOW" : "OFFLINE_PARSED",
+        amount,
+        fee: 0,
+        counterparty: "Offline Parsed SMS",
+        category: isInflow ? "💰 Personal Income & Transfers In" : "📌 General Expenses",
+        timestamp: new Date().toISOString(),
+        raw_sms: text
+      };
+    }
+
+    async function flushOfflineQueue() {
+      try {
+        const q = JSON.parse(localStorage.getItem(STORAGE_KEY_OFFLINE_QUEUE) || "[]");
+        if (!q.length) return;
+        const r = await fetch("/api/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: q.map((t) => ({ text: t })) })
+        });
+        if (r.ok) {
+          localStorage.removeItem(STORAGE_KEY_OFFLINE_QUEUE);
+          showToast(`Synced ${q.length} offline SMS to server!`, "#059669");
+        }
+      } catch (_) {}
+    }
+
+    async function loadReport() {
+      const badge = document.getElementById("connBadge");
+      try {
+        await flushOfflineQueue();
+        const qs = new URLSearchParams({ period: currentPeriod, category: currentCategory === "all" ? "" : currentCategory });
+        const r = await fetch(`/api/report?${qs.toString()}`);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const d = await r.json();
+        latestReport = d;
+        localStorage.setItem(STORAGE_KEY_REPORT, JSON.stringify(d));
+        badge.className = "badge";
+        badge.textContent = "🟢 LIVE SYNC ACTIVE (:5180 & :5174)";
+        renderDashboard(d);
+      } catch (err) {
+        badge.className = "badge offline";
+        badge.textContent = "🟠 OFFLINE MODE (Viewing Cached Phone Ledger)";
+        const cached = localStorage.getItem(STORAGE_KEY_REPORT);
+        if (cached) {
+          latestReport = JSON.parse(cached);
+          renderDashboard(latestReport);
+        }
+      }
+    }
+
+    function renderDashboard(d) {
+      if (!d) return;
+      document.getElementById("kpiSpent").textContent = "KES " + Number(d.total_spent || 0).toLocaleString();
+      document.getElementById("kpiCount").textContent = `${d.total_transactions || 0} transactions (${d.all_time_transactions || d.total_transactions || 0} total)`;
+      document.getElementById("kpiInflow").textContent = "KES " + Number(d.total_inflow || 0).toLocaleString();
+      const net = Number(d.net_cashflow || 0);
+      document.getElementById("kpiNet").textContent = `Net Cashflow: ${net >= 0 ? "+" : ""}KES ${net.toLocaleString()}`;
+      document.getElementById("kpiBal").textContent = d.latest_mpesa_balance !== null && d.latest_mpesa_balance !== undefined
+        ? "KES " + Number(d.latest_mpesa_balance).toLocaleString()
+        : "N/A";
+      document.getElementById("kpiOkoa").textContent = d.latest_okoa_debt !== null && d.latest_okoa_debt !== undefined
+        ? "KES " + Number(d.latest_okoa_debt).toLocaleString()
+        : "KES 0";
+      document.getElementById("kpiFees").textContent = "KES " + Number(d.total_fees_and_okoa_interest || 0).toLocaleString();
+
+      // Populate Category Filter Dropdown
+      const catsList = d.available_categories || DEFAULT_CATEGORIES;
+      const catSelect = document.getElementById("categoryFilter");
+      const prevVal = currentCategory;
+      catSelect.innerHTML = `<option value="all">All Categories</option>` +
+        catsList.map((c) => `<option value="${c}" ${c === prevVal ? "selected" : ""}>${c}</option>`).join("");
+
+      // Populate Budget Inputs
+      const budgets = d.budgets || {};
+      const budgetContainer = document.getElementById("budgetInputs");
+      if (!budgetContainer.dataset.initialized) {
+        budgetContainer.innerHTML = catsList
+          .filter((c) => !c.includes("Income"))
+          .map((c) => `
+            <div class="budget-input-item">
+              <span>${c}</span>
+              <input type="number" data-budget-cat="${c}" value="${budgets[c] ?? 5000}" min="0" step="100" />
+            </div>
+          `).join("");
+        budgetContainer.dataset.initialized = "true";
+      }
+
+      // Render Category Spending Breakdown + Budget Progress
+      const cats = d.category_breakdown || [];
+      document.getElementById("catList").innerHTML = cats.length
+        ? cats.map((c) => {
+            const limit = c.budget_limit || budgets[c.category] || 0;
+            const usedPct = limit > 0 ? Math.round((c.amount / limit) * 1000) / 10 : 0;
+            const fillClass = usedPct >= 100 ? "over" : (usedPct >= 80 ? "warn" : "");
+            const badgeClass = usedPct >= 100 ? "over" : (usedPct >= 80 ? "warn" : "ok");
+            const badgeText = limit > 0
+              ? (usedPct >= 100 ? `🚨 OVER BUDGET (${usedPct}%)` : (usedPct >= 80 ? `⚠️ NEAR LIMIT (${usedPct}%)` : `${usedPct}% of KES ${limit.toLocaleString()} budget`))
+              : `${c.share_pct}% of total spending`;
+            const barWidth = limit > 0 ? Math.min(100, Math.max(4, usedPct)) : Math.max(4, c.share_pct);
+
+            return `
+              <div class="bar-row" onclick="setCategoryFilter('${c.category.replace(/'/g, "\\'")}')">
+                <div class="bar-label">
+                  <span><strong>${c.category}</strong></span>
+                  <strong>KES ${Number(c.amount).toLocaleString()} (${c.share_pct}%)</strong>
+                </div>
+                <div class="bar-track"><div class="bar-fill ${fillClass}" style="width:${barWidth}%"></div></div>
+                <div class="budget-meta">
+                  <span>Share of outflows: ${c.share_pct}%</span>
+                  <span class="budget-badge ${badgeClass}">${badgeText}</span>
+                </div>
+              </div>
+            `;
+          }).join("")
+        : `<p class="sub">No spending recorded for this filter window.</p>`;
+
+      // Render Top Payees Leaderboard
+      const payees = d.top_payees || [];
+      document.getElementById("payeeList").innerHTML = payees.length
+        ? payees.map((p, i) => `
+            <div class="payee-row">
+              <span><span class="rank-num">#${i + 1}</span>${p.counterparty}</span>
+              <strong>KES ${Number(p.amount).toLocaleString()}</strong>
+            </div>
+          `).join("")
+        : `<p class="sub">No payees recorded for this filter window.</p>`;
+
+      renderTransactions();
+    }
+
+    function renderTransactions() {
+      if (!latestReport) return;
+      const query = (document.getElementById("searchInput").value || "").toLowerCase().trim();
+      const catsList = latestReport.available_categories || DEFAULT_CATEGORIES;
+      const txs = (latestReport.transactions || []).filter((t) => {
+        if (!query) return true;
+        return (
+          (t.counterparty || "").toLowerCase().includes(query) ||
+          (t.ref_code || "").toLowerCase().includes(query) ||
+          (t.category || "").toLowerCase().includes(query) ||
+          (t.note || "").toLowerCase().includes(query) ||
+          (t.raw_sms || "").toLowerCase().includes(query)
+        );
+      });
+
+      document.getElementById("ledgerShowingCount").textContent = `${txs.length} transactions shown`;
+
+      document.getElementById("txList").innerHTML = txs.length
+        ? txs.map((t) => {
+            const cls = t.direction === "INFLOW" ? "inflow" : (t.direction === "LOAN_ADVANCE" ? "loan" : "outflow");
+            const sign = t.direction === "INFLOW" ? "+" : (t.direction === "LOAN_ADVANCE" ? "ADVANCE " : "-");
+            const dt = new Date(t.timestamp).toLocaleString("en-GB", {
+              day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+            });
+            const optionsHtml = catsList
+              .map((c) => `<option value="${c}" ${c === t.category ? "selected" : ""}>${c}</option>`)
+              .join("");
+
+            return `
+              <div class="tx-row">
+                <div style="flex:1;min-width:240px;">
+                  <div class="tx-title">
+                    ${t.counterparty}
+                    ${t.note ? `<span style="color:#fbbf24;font-size:12px;font-weight:600;margin-left:6px;">📝 ${t.note}</span>` : ""}
+                  </div>
+                  <div class="tx-meta">
+                    Ref: <code>${t.ref_code}</code> • ${dt}
+                    ${t.fee ? ` • <span style="color:#fb923c;">Fee: KES ${t.fee}</span>` : ""}
+                    ${t.mpesa_balance !== null && t.mpesa_balance !== undefined ? ` • Bal: KES ${Number(t.mpesa_balance).toLocaleString()}` : ""}
+                    ${t.okoa_debt !== null && t.okoa_debt !== undefined ? ` • Okoa Debt: KES ${Number(t.okoa_debt).toLocaleString()}` : ""}
+                  </div>
+                  <div class="tx-actions">
+                    <select class="cat-select" onchange="changeTxCategory('${t.ref_code}', this.value)">
+                      ${optionsHtml}
+                    </select>
+                    <button class="note-btn" onclick="promptTxNote('${t.ref_code}', '${(t.note || "").replace(/'/g, "\\'")}')">
+                      ✏️ ${t.note ? "Edit Note" : "+ Add Note"}
+                    </button>
+                  </div>
+                </div>
+                <div class="tx-amt ${cls}">${sign}KES ${Number(t.amount || 0).toLocaleString()}</div>
+              </div>
+            `;
+          }).join("")
+        : `<p class="sub">No matching transactions found.</p>`;
+    }
+
+    async function changeTxCategory(refCode, newCategory) {
+      try {
+        const r = await fetch("/api/recategorize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ref_code: refCode,
+            category: newCategory,
+            period: currentPeriod,
+            category_filter: currentCategory === "all" ? "" : currentCategory
+          })
+        });
+        if (r.ok) {
+          showToast(`Updated ${refCode} -> ${newCategory}`, "#059669");
+          loadReport();
+        }
+      } catch (_) {
+        showToast("Offline: Category update will sync when online", "#d97706");
+      }
+    }
+
+    async function promptTxNote(refCode, existingNote) {
+      const note = prompt(`Add a custom note or budget tag for transaction ${refCode}:`, existingNote || "");
+      if (note === null) return;
+      try {
+        const r = await fetch("/api/recategorize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ref_code: refCode, note })
+        });
+        if (r.ok) {
+          showToast(`Saved note on ${refCode}`, "#059669");
+          loadReport();
+        }
+      } catch (_) {}
+    }
+
+    async function saveBudgetLimits() {
+      const inputs = document.querySelectorAll("[data-budget-cat]");
+      const budgets = {};
+      inputs.forEach((inp) => {
+        budgets[inp.getAttribute("data-budget-cat")] = Number(inp.value) || 0;
+      });
+      try {
+        const r = await fetch("/api/budgets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ budgets, period: currentPeriod })
+        });
+        if (r.ok) {
+          showToast("Monthly category budgets saved!", "#059669");
+          document.getElementById("budgetDrawer").classList.remove("open");
+          loadReport();
+        }
+      } catch (_) {
+        showToast("Could not save budgets while offline", "#dc2626");
+      }
+    }
+
+    async function ingestSms() {
+      const text = document.getElementById("manualSms").value.trim();
+      if (!text) return;
+      try {
+        const r = await fetch("/api/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bulk_text: text })
+        });
+        if (!r.ok) throw new Error("Offline");
+        const res = await r.json();
+        document.getElementById("manualSms").value = "";
+        showToast(`Parsed & added ${res.added_count} new transaction(s)!`, "#059669");
+        loadReport();
+      } catch (_) {
+        // Offline local parsing & queuing
+        const q = JSON.parse(localStorage.getItem(STORAGE_KEY_OFFLINE_QUEUE) || "[]");
+        q.push(text);
+        localStorage.setItem(STORAGE_KEY_OFFLINE_QUEUE, JSON.stringify(q));
+        const localTx = parseSmsClientOffline(text);
+        if (localTx && latestReport) {
+          latestReport.transactions.unshift(localTx);
+          if (localTx.direction === "OUTFLOW") latestReport.total_spent += localTx.amount;
+          localStorage.setItem(STORAGE_KEY_REPORT, JSON.stringify(latestReport));
+          renderDashboard(latestReport);
+        }
+        document.getElementById("manualSms").value = "";
+        showToast("Parsed offline & queued for auto-sync!", "#d97706");
+      }
+    }
+
+    function fillSampleSms() {
+      document.getElementById("manualSms").value =
+        "UK7DC99XPL Confirmed. Ksh320.00 paid to NAIVAS SUPERMARKET MOI AVE. on 7/11/26 at 7:10 PM. New M-PESA balance is Ksh6,581.65. Transaction cost, Ksh0.00.";
+    }
+
+    async function syncFromPhone() {
+      const btn = document.getElementById("syncBtn");
+      const orig = btn.textContent;
+      btn.textContent = "⏳ Connecting to Redmi Note 12...";
+      try {
+        const r = await fetch("/api/sync-phone", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ limit: 150, period: currentPeriod })
+        });
+        const d = await r.json();
+        showToast(d.message || "Phone sync completed!", d.connected ? "#059669" : "#0284c7");
+        loadReport();
+      } catch (_) {
+        showToast("Cannot reach server for ADB sync right now.", "#d97706");
+      } finally {
+        btn.textContent = orig;
+      }
+    }
+
+    function exportCsv() {
+      const qs = new URLSearchParams({
+        period: currentPeriod,
+        category: currentCategory === "all" ? "" : currentCategory
+      });
+      window.location.href = `/api/export.csv?${qs.toString()}`;
+    }
+
+    loadReport();
+  </script>
+</body>
+</html>

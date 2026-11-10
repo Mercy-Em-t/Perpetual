@@ -1,0 +1,11 @@
+{
+  "_comment": "DEMO DATA ONLY. In production this tool should call the real HRIS/payroll API with the caller's OAuth token.",
+  "employees": [
+    {"member_id": "mbr_owner_01", "name": "Lead Business Owner", "role": "EXECUTIVE", "manager_id": null, "monthly_salary_usd": 2500},
+    {"member_id": "mbr_hr_01", "name": "Grace HR", "role": "HR_MANAGER", "manager_id": "mbr_owner_01", "monthly_salary_usd": 1400},
+    {"member_id": "mbr_lead_ops_01", "name": "Peter Floor Lead", "role": "EXECUTIVE", "manager_id": "mbr_owner_01", "monthly_salary_usd": 1200},
+    {"member_id": "mbr_cashier_01", "name": "Jane Cashier", "role": "CASHIER", "manager_id": "mbr_lead_ops_01", "monthly_salary_usd": 450},
+    {"member_id": "mbr_packager_01", "name": "David Warehouse", "role": "PACKAGER", "manager_id": "mbr_lead_ops_01", "monthly_salary_usd": 380},
+    {"member_id": "mbr_courier_01", "name": "Dennis Rider", "role": "COURIER", "manager_id": "mbr_lead_ops_01", "monthly_salary_usd": 400}
+  ]
+}

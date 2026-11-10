@@ -4,6 +4,12 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.os.BatteryManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.telephony.SmsMessage;
 import android.util.Log;
@@ -265,6 +271,7 @@ public class SmsReceiver extends BroadcastReceiver {
             conn.setDoOutput(true);
             conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
             conn.setRequestProperty("User-Agent", "Savannah-Till-Forwarder/2.5.0");
+            conn.setRequestProperty("x-till-relay-secret", "savannah_relay_sec_7f9b2c81e3a4d650");
             byte[] bytes = jsonPayload.getBytes(StandardCharsets.UTF_8);
             try (OutputStream os = conn.getOutputStream()) {
                 os.write(bytes);
@@ -277,4 +284,56 @@ public class SmsReceiver extends BroadcastReceiver {
             if (conn != null) conn.disconnect();
         }
     }
+
+    public static void sendHeartbeatAsync(final Context context) {
+        new Thread(() -> {
+            try {
+                int battery = -1;
+                boolean isCharging = false;
+                try {
+                    IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+                    Intent batteryStatus = context.registerReceiver(null, ifilter);
+                    if (batteryStatus != null) {
+                        int level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                        int scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+                        if (scale > 0) {
+                            battery = (int) ((level / (float) scale) * 100);
+                        }
+                        int status = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                        isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                                     status == BatteryManager.BATTERY_STATUS_FULL;
+                    }
+                } catch (Exception ignored) {}
+
+                String netType = "CELLULAR";
+                try {
+                    ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+                    if (cm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        Network net = cm.getActiveNetwork();
+                        if (net != null) {
+                            NetworkCapabilities caps = cm.getNetworkCapabilities(net);
+                            if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                                netType = "WIFI";
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+
+                JSONObject payload = new JSONObject();
+                payload.put("action", "ping");
+                payload.put("battery", battery);
+                payload.put("charging", isCharging);
+                payload.put("network", netType);
+                payload.put("version", "2.6.0");
+                payload.put("device_id", "redmi_note_12");
+
+                String tillUrl = getTillEndpoint(context);
+                postToEndpoint(tillUrl, payload.toString());
+                Log.i(TAG, "Heartbeat sent to " + tillUrl + ": battery=" + battery + "%, charging=" + isCharging + ", net=" + netType);
+            } catch (Exception e) {
+                Log.w(TAG, "Heartbeat error: " + e.getMessage());
+            }
+        }).start();
+    }
+
 }

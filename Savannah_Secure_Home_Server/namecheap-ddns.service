@@ -1,0 +1,7 @@
+[Unit]
+Description=Namecheap Dynamic DNS Synchronizer for missperpetual.cloud
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/update_namecheap_ddns.py

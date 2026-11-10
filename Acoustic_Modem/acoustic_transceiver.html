@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Savannah 16-MFSK Acoustic Modem Transceiver</title>
+  <style>
+    :root {
+      --bg: #0b101b;
+      --panel: #131c2e;
+      --border: #23324d;
+      --accent: #10b981;
+      --accent-glow: rgba(16, 185, 129, 0.25);
+      --cyan: #06b6d4;
+      --amber: #f59e0b;
+      --danger: #ef4444;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --mono: "JetBrains Mono", "Fira Code", Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 920px;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 22px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      margin-bottom: 18px;
+    }
+    .brand h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge {
+      font-size: 0.72rem;
+      font-family: var(--mono);
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+    .brand p {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 4px;
+    }
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 14px 18px;
+      background: var(--panel);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .tab-btn.active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.16), rgba(19, 28, 46, 0.95));
+      box-shadow: 0 0 18px var(--accent-glow);
+    }
+    .panel {
+      display: none;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+    .panel.active { display: block; }
+    label {
+      display: block;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    textarea, input[type="text"] {
+      width: 100%;
+      background: #080d17;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      margin-bottom: 16px;
+      outline: none;
+    }
+    textarea:focus, input[type="text"]:focus {
+      border-color: var(--cyan);
+    }
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    button.action-btn {
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: none;
+      font-weight: 700;
+      font-size: 0.92rem;
+      cursor: pointer;
+      background: var(--accent);
+      color: #04130d;
+      transition: transform 0.1s ease, opacity 0.2s;
+    }
+    button.action-btn:hover { opacity: 0.92; }
+    button.action-btn:active { transform: scale(0.98); }
+    button.action-btn.secondary {
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button.action-btn.danger {
+      background: var(--danger);
+      color: #fff;
+    }
+    .canvas-box {
+      background: #060a12;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+    canvas {
+      width: 100%;
+      height: 150px;
+      display: block;
+    }
+    .hex-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 6px;
+      margin-top: 10px;
+    }
+    @media (min-width: 640px) {
+      .hex-grid { grid-template-columns: repeat(16, 1fr); }
+    }
+    .hex-cell {
+      background: #09101d;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 2px;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      transition: all 0.08s ease;
+    }
+    .hex-cell .nib { font-weight: 700; color: var(--cyan); }
+    .hex-cell .hz { font-size: 0.62rem; color: var(--muted); }
+    .hex-cell.active {
+      background: var(--accent);
+      border-color: #fff;
+      transform: translateY(-2px);
+    }
+    .hex-cell.active .nib, .hex-cell.active .hz { color: #04130d; font-weight: 800; }
+    .status-box {
+      background: #080d17;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      font-family: var(--mono);
+      font-size: 0.83rem;
+      line-height: 1.5;
+      color: #cbd5e1;
+      max-height: 220px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .rx-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #080d17;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+    }
+    .state-pill {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 700;
+      background: #1e293b;
+      color: var(--amber);
+    }
+    .state-pill.ok {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <h1>
+          <span>Savannah 16-MFSK Acoustic Transceiver</span>
+          <span class="badge">CRC16-CCITT</span>
+        </h1>
+        <p>Air-Gapped Phone Speaker &rarr; Laptop Microphone Acoustic SMS Bridge (1700 Hz &ndash; 4700 Hz)</p>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tabTxBtn" onclick="switchTab('tx')">
+        📱 Transmitter (Phone Speaker)
+      </button>
+      <button class="tab-btn" id="tabRxBtn" onclick="switchTab('rx')">
+        💻 Receiver (Laptop Microphone)
+      </button>
+    </div>
+
+    <div class="canvas-box">
+      <label id="vizLabel">Live 16-Tone MFSK Spectrum &amp; Waveform Monitor</label>
+      <canvas id="scopeCanvas" width="860" height="150"></canvas>
+      <div class="hex-grid" id="hexGrid"></div>
+    </div>
+
+    <!-- TRANSMITTER PANEL -->
+    <div class="panel active" id="txPanel">
+      <label for="txInput">M-Pesa Confirmation SMS Payload (UTF-8)</label>
+      <textarea id="txInput" rows="3">UK6DC1DCIM Confirmed. Ksh650.00 received from 254710720949 MERCY on 7/11/26 at 4:02 PM. New M-PESA balance is Ksh14,250.00.</textarea>
+
+      <div class="btn-row">
+        <button class="action-btn" id="btnTransmit" onclick="transmitAcousticFrame()">
+          🔊 Play Acoustic MFSK Frame
+        </button>
+        <button class="action-btn secondary" onclick="stopTransmission()">
+          ⏹ Stop
+        </button>
+        <select id="speedMode" style="background:#080d17;color:#f1f5f9;border:1px solid #23324d;border-radius:10px;padding:11px;font-family:var(--mono);font-size:0.84rem;">
+          <option value="standard">Standard Acoustic (45ms symbol / 15ms guard)</option>
+          <option value="robust">Room / Acoustic Echo Robust (85ms symbol / 30ms guard)</option>
+        </select>
+      </div>
+
+      <label>Frame &amp; Modulation Telemetry</label>
+      <div class="status-box" id="txLog">Ready to encode and transmit 16-tone MFSK frame.</div>
+    </div>
+
+    <!-- RECEIVER PANEL -->
+    <div class="panel" id="rxPanel">
+      <div class="rx-banner">
+        <span>Decoder State: <strong id="rxStateText">IDLE (Mic Off)</strong></span>
+        <span class="state-pill" id="rxCrcBadge">WAITING FOR SYNC (1000 &rarr; 1350 Hz)</span>
+      </div>
+
+      <label for="webhookUrl">Auto-Forward Webhook Endpoint (Savannah Till Server)</label>
+      <input type="text" id="webhookUrl" value="http://192.168.100.32:5174/api/till/receipt" />
+
+      <div class="btn-row">
+        <button class="action-btn" id="btnListen" onclick="startMicrophoneReceiver()">
+          🎙️ Start Microphone Decoder
+        </button>
+        <button class="action-btn danger" id="btnStopListen" onclick="stopMicrophoneReceiver()" style="display:none;">
+          ⏹ Stop Microphone
+        </button>
+        <button class="action-btn secondary" onclick="runLoopbackSelfTest()">
+          ⚡ Instant Acoustic Loopback Self-Test
+        </button>
+      </div>
+
+      <label for="rxOutput">Live Reconstructed SMS Text</label>
+      <textarea id="rxOutput" rows="3" readonly placeholder="Decoded UTF-8 SMS will appear here in real time as nibbles arrive..."></textarea>
+
+      <label>Receiver Spectral &amp; Webhook Log</label>
+      <div class="status-box" id="rxLog">Click "Start Microphone Decoder" to listen via getUserMedia({ audio: true }).</div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 16-Tone MFSK Protocol Constants (Matches acoustic_modem.py)
+    // =========================================================================
+    const SYNC1_FREQ = 1000;
+    const SYNC2_FREQ = 1350;
+    const EOT_FREQ   = 5200;
+    const BASE_FREQ  = 1700;
+    const FREQ_STEP  = 200;
+    const NIBBLE_FREQS = Array.from({ length: 16 }, (_, i) => BASE_FREQ + i * FREQ_STEP);
+
+    const TIMING_PRESETS = {
+      standard: { syncDur: 0.120, syncGap: 0.030, symDur: 0.045, guardDur: 0.015 },
+      robust:   { syncDur: 0.160, syncGap: 0.040, symDur: 0.085, guardDur: 0.030 }
+    };
+
+    // Build 16-nibble frequency indicator grid
+    const hexGridEl = document.getElementById('hexGrid');
+    const hexCells = [];
+    NIBBLE_FREQS.forEach((hz, idx) => {
+      const cell = document.createElement('div');
+      cell.className = 'hex-cell';
+      cell.innerHTML = `<div class="nib">0x${idx.toString(16).toUpperCase()}</div><div class="hz">${hz}Hz</div>`;
+      hexGridEl.appendChild(cell);
+      hexCells.push(cell);
+    });
+
+    function highlightHexCell(activeIndex) {
+      hexCells.forEach((c, i) => c.classList.toggle('active', i === activeIndex));
+    }
+
+    function switchTab(tab) {
+      document.getElementById('tabTxBtn').classList.toggle('active', tab === 'tx');
+      document.getElementById('tabRxBtn').classList.toggle('active', tab === 'rx');
+      document.getElementById('txPanel').classList.toggle('active', tab === 'tx');
+      document.getElementById('rxPanel').classList.toggle('active', tab === 'rx');
+    }
+
+    // =========================================================================
+    // CRC16-CCITT (0x1021, initial 0xFFFF)
+    // =========================================================================
+    function crc16Ccitt(bytes) {
+      let crc = 0xFFFF;
+      for (let i = 0; i < bytes.length; i++) {
+        crc ^= (bytes[i] << 8);
+        for (let b = 0; b < 8; b++) {
+          if (crc & 0x8000) {
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+          } else {
+            crc = (crc << 1) & 0xFFFF;
+          }
+        }
+      }
+      return crc;
+    }
+
+    function packFrameBytes(text) {
+      const encoder = new TextEncoder();
+      const payload = encoder.encode(text);
+      const crc = crc16Ccitt(payload);
+      const frame = new Uint8Array(2 + payload.length + 2);
+      frame[0] = (payload.length >> 8) & 0xFF;
+      frame[1] = payload.length & 0xFF;
+      frame.set(payload, 2);
+      frame[2 + payload.length] = (crc >> 8) & 0xFF;
+      frame[2 + payload.length + 1] = crc & 0xFF;
+      return { frame, payload, crc };
+    }
+
+    // =========================================================================
+    // Web Audio Transmitter (OscillatorNode + GainNode + Live Analyser)
+    // =========================================================================
+    let txAudioCtx = null;
+    let txAnalyser = null;
+    let txAnimId = null;
+    let txTimers = [];
+
+    function stopTransmission() {
+      txTimers.forEach(t => clearTimeout(t));
+      txTimers = [];
+      if (txAnimId) cancelAnimationFrame(txAnimId);
+      if (txAudioCtx) {
+        txAudioCtx.close().catch(() => {});
+        txAudioCtx = null;
+      }
+      highlightHexCell(-1);
+    }
+
+    function transmitAcousticFrame() {
+      stopTransmission();
+      const text = document.getElementById('txInput').value.trim();
+      if (!text) return;
+
+      const mode = document.getElementById('speedMode').value;
+      const timing = TIMING_PRESETS[mode];
+      const { frame, payload, crc } = packFrameBytes(text);
+
+      // Extract nibbles
+      const nibbles = [];
+      for (let i = 0; i < frame.length; i++) {
+        nibbles.push((frame[i] >> 4) & 0x0F);
+        nibbles.push(frame[i] & 0x0F);
+      }
+
+      txAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+      txAnalyser = txAudioCtx.createAnalyser();
+      txAnalyser.fftSize = 2048;
+      txAnalyser.connect(txAudioCtx.destination);
+
+      const now = txAudioCtx.currentTime + 0.05;
+      let cursor = now;
+
+      function scheduleTone(freq, dur, nibIdx = -1) {
+        const osc = txAudioCtx.createOscillator();
+        const gain = txAudioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, cursor);
+
+        // Smooth 4ms ramp to prevent speaker clicks
+        const ramp = Math.min(0.004, dur * 0.2);
+        gain.gain.setValueAtTime(0.0001, cursor);
+        gain.gain.linearRampToValueAtTime(0.75, cursor + ramp);
+        gain.gain.setValueAtTime(0.75, cursor + dur - ramp);
+        gain.gain.linearRampToValueAtTime(0.0001, cursor + dur);
+
+        osc.connect(gain);
+        gain.connect(txAnalyser);
+        osc.start(cursor);
+        osc.stop(cursor + dur);
+
+        const delayMs = Math.max(0, (cursor - txAudioCtx.currentTime) * 1000);
+        txTimers.push(setTimeout(() => highlightHexCell(nibIdx), delayMs));
+      }
+
+      // Schedule Preamble: SYNC1 -> SYNC2
+      scheduleTone(SYNC1_FREQ, timing.syncDur, -1);
+      cursor += timing.syncDur + timing.syncGap;
+      scheduleTone(SYNC2_FREQ, timing.syncDur, -1);
+      cursor += timing.syncDur + timing.syncGap;
+
+      // Schedule Data Nibbles
+      for (let i = 0; i < nibbles.length; i++) {
+        const nib = nibbles[i];
+        scheduleTone(NIBBLE_FREQS[nib], timing.symDur, nib);
+        cursor += timing.symDur + timing.guardDur;
+      }
+
+      // Schedule EOT Tone
+      scheduleTone(EOT_FREQ, timing.syncDur, -1);
+      cursor += timing.syncDur;
+
+      const totalDuration = (cursor - now).toFixed(2);
+      txTimers.push(setTimeout(() => highlightHexCell(-1), (cursor - txAudioCtx.currentTime) * 1000));
+
+      document.getElementById('txLog').textContent =
+        `[TX ACTIVE] Transmitting 16-Tone MFSK Frame...\n` +
+        `  Payload Bytes : ${payload.length} B | Total Frame: ${frame.length} B (${nibbles.length} nibbles)\n` +
+        `  CRC16-CCITT   : 0x${crc.toString(16).toUpperCase().padStart(4, '0')}\n` +
+        `  Preamble      : ${SYNC1_FREQ} Hz -> ${SYNC2_FREQ} Hz | EOT: ${EOT_FREQ} Hz\n` +
+        `  Duration      : ${totalDuration} sec (${mode} timing)`;
+
+      startVisualizer(txAnalyser);
+    }
+
+    // =========================================================================
+    // Web Audio Microphone Receiver (getUserMedia + AnalyserNode FFT Decoder)
+    // =========================================================================
+    let rxAudioCtx = null;
+    let rxAnalyser = null;
+    let rxStream = null;
+    let rxInterval = null;
+
+    function logRx(msg) {
+      const box = document.getElementById('rxLog');
+      const ts = new Date().toLocaleTimeString();
+      box.textContent = `[${ts}] ${msg}\n` + box.textContent;
+    }
+
+    function getFrequencyMagnitude(freqData, sampleRate, fftSize, targetHz) {
+      const bin = Math.round((targetHz * fftSize) / sampleRate);
+      // Peak over bin-1..bin+1 to handle minor clock drift
+      let maxVal = 0;
+      for (let b = Math.max(0, bin - 1); b <= Math.min(freqData.length - 1, bin + 1); b++) {
+        if (freqData[b] > maxVal) maxVal = freqData[b];
+      }
+      return maxVal;
+    }
+
+    async function startMicrophoneReceiver() {
+      stopMicrophoneReceiver();
+      try {
+        rxStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        });
+      } catch (err) {
+        logRx(`Microphone access error: ${err.message}`);
+        return;
+      }
+
+      rxAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+      const source = rxAudioCtx.createMediaStreamSource(rxStream);
+      rxAnalyser = rxAudioCtx.createAnalyser();
+      rxAnalyser.fftSize = 4096;
+      rxAnalyser.smoothingTimeConstant = 0.15;
+      source.connect(rxAnalyser);
+
+      document.getElementById('btnListen').style.display = 'none';
+      document.getElementById('btnStopListen').style.display = 'inline-block';
+      document.getElementById('rxStateText').textContent = 'LISTENING FOR SYNC1 (1000 Hz)';
+      logRx('Microphone active (44.1 kHz, raw DSP mode). Listening for 1000 Hz -> 1350 Hz preamble...');
+
+      startVisualizer(rxAnalyser);
+      startFftStateMachine();
+    }
+
+    function stopMicrophoneReceiver() {
+      if (rxInterval) { clearInterval(rxInterval); rxInterval = null; }
+      if (rxStream) { rxStream.getTracks().forEach(t => t.stop()); rxStream = null; }
+      if (rxAudioCtx) { rxAudioCtx.close().catch(() => {}); rxAudioCtx = null; }
+      document.getElementById('btnListen').style.display = 'inline-block';
+      document.getElementById('btnStopListen').style.display = 'none';
+      document.getElementById('rxStateText').textContent = 'IDLE (Mic Off)';
+      highlightHexCell(-1);
+    }
+
+    function startFftStateMachine() {
+      const freqBins = new Uint8Array(rxAnalyser.frequencyBinCount);
+      const sr = rxAudioCtx.sampleRate;
+      const fftSize = rxAnalyser.fftSize;
+
+      let state = 'WAIT_SYNC1';
+      let stateTimestamp = 0;
+      let symbolVoteBuffer = [];
+      let receivedNibbles = [];
+      let expectedPayloadLen = null;
+      let inGuard = false;
+
+      rxInterval = setInterval(() => {
+        if (!rxAnalyser) return;
+        rxAnalyser.getByteFrequencyData(freqBins);
+
+        const pSync1 = getFrequencyMagnitude(freqBins, sr, fftSize, SYNC1_FREQ);
+        const pSync2 = getFrequencyMagnitude(freqBins, sr, fftSize, SYNC2_FREQ);
+        const pEot   = getFrequencyMagnitude(freqBins, sr, fftSize, EOT_FREQ);
+
+        let bestNibble = -1;
+        let bestPower = 0;
+        for (let i = 0; i < 16; i++) {
+          const p = getFrequencyMagnitude(freqBins, sr, fftSize, NIBBLE_FREQS[i]);
+          if (p > bestPower) {
+            bestPower = p;
+            bestNibble = i;
+          }
+        }
+
+        const now = performance.now();
+
+        if (state === 'WAIT_SYNC1') {
+          if (pSync1 > 135 && pSync1 > bestPower * 1.15) {
+            state = 'WAIT_SYNC2';
+            stateTimestamp = now;
+            document.getElementById('rxStateText').textContent = 'SYNC1 DETECTED -> WAITING SYNC2';
+          }
+        } else if (state === 'WAIT_SYNC2') {
+          if (pSync2 > 135 && pSync2 > pSync1) {
+            state = 'WAIT_DATA';
+            stateTimestamp = now;
+            receivedNibbles = [];
+            symbolVoteBuffer = [];
+            expectedPayloadLen = null;
+            inGuard = true;
+            document.getElementById('rxOutput').value = '';
+            document.getElementById('rxStateText').textContent = 'RECEIVING 16-MFSK NIBBLES';
+            logRx('Preamble locked (1000 Hz -> 1350 Hz). Decoding hex nibbles...');
+          } else if (now - stateTimestamp > 600) {
+            state = 'WAIT_SYNC1';
+            document.getElementById('rxStateText').textContent = 'LISTENING FOR SYNC1 (1000 Hz)';
+          }
+        } else if (state === 'WAIT_DATA') {
+          // Wait for SYNC2 tone to subside before reading first symbol
+          if (pSync2 > 130 && receivedNibbles.length === 0) return;
+
+          // Check EOT tone or complete frame
+          const totalTargetNibbles = expectedPayloadLen !== null ? (2 + expectedPayloadLen + 2) * 2 : 99999;
+          if ((pEot > 140 && receivedNibbles.length >= 8) || receivedNibbles.length >= totalTargetNibbles) {
+            finalizeReceivedFrame(receivedNibbles);
+            state = 'WAIT_SYNC1';
+            highlightHexCell(-1);
+            return;
+          }
+
+          if (bestPower > 115) {
+            inGuard = false;
+            symbolVoteBuffer.push(bestNibble);
+            highlightHexCell(bestNibble);
+          } else if (!inGuard && symbolVoteBuffer.length >= 2) {
+            // Guard silence reached: majority-vote the symbol just finished
+            inGuard = true;
+            const counts = {};
+            let modeNib = symbolVoteBuffer[0], maxC = 0;
+            for (const v of symbolVoteBuffer) {
+              counts[v] = (counts[v] || 0) + 1;
+              if (counts[v] > maxC) { maxC = counts[v]; modeNib = v; }
+            }
+            symbolVoteBuffer = [];
+            receivedNibbles.push(modeNib);
+            updateLivePartialText(receivedNibbles);
+
+            if (receivedNibbles.length === 4) {
+              const lenHi = (receivedNibbles[0] << 4) | receivedNibbles[1];
+              const lenLo = (receivedNibbles[2] << 4) | receivedNibbles[3];
+              expectedPayloadLen = (lenHi << 8) | lenLo;
+              logRx(`Decoded frame header: payload length = ${expectedPayloadLen} bytes.`);
+            }
+          }
+        }
+      }, 8);
+    }
+
+    function updateLivePartialText(nibbles) {
+      if (nibbles.length < 6) return;
+      const byteCount = Math.floor((nibbles.length - 4) / 2);
+      const bytes = new Uint8Array(byteCount);
+      for (let i = 0; i < byteCount; i++) {
+        bytes[i] = (nibbles[4 + i * 2] << 4) | nibbles[4 + i * 2 + 1];
+      }
+      document.getElementById('rxOutput').value = new TextDecoder().decode(bytes);
+    }
+
+    async function finalizeReceivedFrame(nibbles) {
+      if (nibbles.length < 8) return;
+      const totalBytes = Math.floor(nibbles.length / 2);
+      const raw = new Uint8Array(totalBytes);
+      for (let i = 0; i < totalBytes; i++) {
+        raw[i] = (nibbles[i * 2] << 4) | nibbles[i * 2 + 1];
+      }
+      const declaredLen = (raw[0] << 8) | raw[1];
+      const safeLen = Math.min(declaredLen, Math.max(0, totalBytes - 4));
+      const payload = raw.slice(2, 2 + safeLen);
+      const rxCrc = ((raw[2 + safeLen] || 0) << 8) | (raw[2 + safeLen + 1] || 0);
+      const calcCrc = crc16Ccitt(payload);
+      const crcOk = (rxCrc === calcCrc);
+
+      const text = new TextDecoder().decode(payload);
+      document.getElementById('rxOutput').value = text;
+      document.getElementById('rxStateText').textContent = 'FRAME COMPLETE';
+
+      const badge = document.getElementById('rxCrcBadge');
+      badge.textContent = crcOk
+        ? `CRC16 PASS (0x${calcCrc.toString(16).toUpperCase().padStart(4, '0')})`
+        : `CRC16 MISMATCH (RX 0x${rxCrc.toString(16).toUpperCase()} != 0x${calcCrc.toString(16).toUpperCase()})`;
+      badge.className = 'state-pill ' + (crcOk ? 'ok' : '');
+
+      logRx(`Decoded SMS (${payload.length}B, CRC16=${crcOk ? 'PASS' : 'FAIL'}): "${text}"`);
+      await forwardReceiptToServer(text, crcOk);
+    }
+
+    async function forwardReceiptToServer(smsText, crcValid) {
+      const url = document.getElementById('webhookUrl').value.trim();
+      if (!url) return;
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sms_text: smsText,
+            text: smsText,
+            raw_sms: smsText,
+            crc_valid: crcValid,
+            source: 'web_audio_16mfsk_receiver',
+            timestamp: new Date().toISOString()
+          })
+        });
+        logRx(`POST -> ${url} responded HTTP ${res.status}`);
+      } catch (err) {
+        logRx(`POST -> ${url} failed (${err.message}). Make sure Savannah server is reachable.`);
+      }
+    }
+
+    // Instant Loopback Self-Test (Synthesizes frame, decodes it, and triggers webhook)
+    async function runLoopbackSelfTest() {
+      const sample = document.getElementById('txInput').value.trim();
+      const { frame } = packFrameBytes(sample);
+      const nibbles = [];
+      for (let i = 0; i < frame.length; i++) {
+        nibbles.push((frame[i] >> 4) & 0x0F);
+        nibbles.push(frame[i] & 0x0F);
+      }
+      logRx('Running loopback self-test with active TX payload...');
+      await finalizeReceivedFrame(nibbles);
+    }
+
+    // =========================================================================
+    // Live Spectrum & Waveform Canvas Visualizer
+    // =========================================================================
+    function startVisualizer(analyser) {
+      if (txAnimId) cancelAnimationFrame(txAnimId);
+      const canvas = document.getElementById('scopeCanvas');
+      const ctx = canvas.getContext('2d');
+      const freqData = new Uint8Array(analyser.frequencyBinCount);
+      const timeData = new Uint8Array(analyser.fftSize);
+
+      function draw() {
+        txAnimId = requestAnimationFrame(draw);
+        analyser.getByteFrequencyData(freqData);
+        analyser.getByteTimeDomainData(timeData);
+
+        ctx.fillStyle = '#060a12';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw spectrum bars up to ~6500 Hz
+        const usableBins = Math.min(freqData.length, Math.floor((6500 * analyser.fftSize) / 44100));
+        const barWidth = canvas.width / usableBins;
+        for (let i = 0; i < usableBins; i++) {
+          const val = freqData[i];
+          const h = (val / 255) * (canvas.height - 20);
+          ctx.fillStyle = val > 140 ? '#10b981' : '#06b6d4';
+          ctx.fillRect(i * barWidth, canvas.height - h, Math.max(1, barWidth - 1), h);
+        }
+
+        // Overlay time-domain waveform
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#f59e0b';
+        ctx.beginPath();
+        const slice = canvas.width / timeData.length;
+        for (let i = 0; i < timeData.length; i++) {
+          const y = (timeData[i] / 128.0) * (canvas.height / 2);
+          if (i === 0) ctx.moveTo(0, y);
+          else ctx.lineTo(i * slice, y);
+        }
+        ctx.stroke();
+      }
+      draw();
+    }
+  </script>
+</body>
+</html>

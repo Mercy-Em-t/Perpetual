@@ -48,6 +48,14 @@ public class MainActivity extends Activity {
         // Sanitize and migrate any legacy or cached URLs
         sanitizePreferences(prefs);
 
+        // Dead-Man's Switch Heartbeat: Dispatch immediately on launch & register self-rescheduling AlarmManager
+        try {
+            SmsReceiver.sendHeartbeatAsync(this);
+            HeartbeatReceiver.scheduleNext(this);
+        } catch (Exception e) {
+            android.util.Log.w("MainActivity", "Heartbeat schedule error: " + e.getMessage());
+        }
+
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(Color.parseColor("#0F172A"));
 
@@ -63,7 +71,7 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("Dual-Channel Autonomous Bridge (Redmi Note 12 v2.5.0)");
+        subtitle.setText("Dual-Channel Autonomous Bridge (Redmi Note 12 v2.6.0 • Sentinel Active)");
         subtitle.setTextColor(Color.parseColor("#94A3B8"));
         subtitle.setPadding(0, 8, 0, 24);
         root.addView(subtitle);

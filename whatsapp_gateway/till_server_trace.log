@@ -1,0 +1,121 @@
+====================================================================
+TIMESTAMP: 2026-11-06T13:45:14.290Z | CLIENT IP: ::ffff:127.0.0.1
+[+1ms] STEP 1 (HTTP INBOUND): Method=POST | Sender=MPESA | SIM=REDMI_TILL_SIM | Raw="UK6DC1DCIM Confirmed.on 6/11/26 at 4:35 PMKSH1.00 received from 254710720949 MERCY TRYPHEN EMURUGAT. New Account balance is KSH26.56. Transaction cost, KSH0.00.  Receiving payments of Ksh 500 & below in your Lipa na M-PESA till is now FREE!"
+[+2ms] STEP 2 (REGEX PARSE): Extracted Code=UK6DC1DCIM | Amount=KES 1 | Payer="MERCY TRYPHEN EMURUGAT" (254710720949)
+[+1825ms] STEP 3 (DEDUP CHECK): Code UK6DC1DCIM is fresh (unused in Supabase)
+[+3129ms] STEP 4 (ORDER SEARCH): Found 0 pending order(s) with total_price = KES 1
+[+3132ms] STEP 5 (POOL SAVE): Saved receipt to till_receipt_pool.json with status=UNCLAIMED_POOL
+[+3151ms] STEP 6 (WHATSAPP ALERT): Sent POOLED alert to Operations WhatsApp Group
+FINAL SERVER JSON RESPONSE:
+{
+  "success": true,
+  "status": "POOLED",
+  "mpesa_code": "UK6DC1DCIM",
+  "amount": 1,
+  "payer_name": "MERCY TRYPHEN EMURUGAT",
+  "trace": [
+    "[+1ms] STEP 1 (HTTP INBOUND): Method=POST | Sender=MPESA | SIM=REDMI_TILL_SIM | Raw=\"UK6DC1DCIM Confirmed.on 6/11/26 at 4:35 PMKSH1.00 received from 254710720949 MERCY TRYPHEN EMURUGAT. New Account balance is KSH26.56. Transaction cost, KSH0.00.  Receiving payments of Ksh 500 & below in your Lipa na M-PESA till is now FREE!\"",
+    "[+2ms] STEP 2 (REGEX PARSE): Extracted Code=UK6DC1DCIM | Amount=KES 1 | Payer=\"MERCY TRYPHEN EMURUGAT\" (254710720949)",
+    "[+1825ms] STEP 3 (DEDUP CHECK): Code UK6DC1DCIM is fresh (unused in Supabase)",
+    "[+3129ms] STEP 4 (ORDER SEARCH): Found 0 pending order(s) with total_price = KES 1",
+    "[+3132ms] STEP 5 (POOL SAVE): Saved receipt to till_receipt_pool.json with status=UNCLAIMED_POOL",
+    "[+3151ms] STEP 6 (WHATSAPP ALERT): Sent POOLED alert to Operations WhatsApp Group"
+  ]
+}
+====================================================================
+====================================================================
+TIMESTAMP: 2026-11-07T16:06:58.785Z | CLIENT IP: ::ffff:127.0.0.1
+[+1ms] STEP 1 (HTTP INBOUND): Method=POST | Sender=MPESA | SIM=TILL_SIM | Raw="UK6DC1DCIM Confirmed. Ksh650.00 received from 254710720949 MERCY on 7/11/26 at 4:02 PM. New M-PESA balance is Ksh14,250.00."
+[+3ms] STEP 2 (REGEX PARSE): Extracted Code=UK6DC1DCIM | Amount=KES 650 | Payer="Customer" (no-phone)
+[+1754ms] STEP 3 (DEDUP CHECK): Code UK6DC1DCIM is fresh (unused in Supabase)
+[+2360ms] STEP 4 (ORDER SEARCH): Found 0 pending order(s) with total_price = KES 650
+[+2362ms] STEP 5 (POOL SAVE): Saved receipt to till_receipt_pool.json with status=UNCLAIMED_POOL
+[+2384ms] STEP 6 (WHATSAPP ALERT): Sent POOLED alert to Operations WhatsApp Group
+FINAL SERVER JSON RESPONSE:
+{
+  "success": true,
+  "status": "POOLED",
+  "mpesa_code": "UK6DC1DCIM",
+  "amount": 650,
+  "payer_name": "Customer",
+  "trace": [
+    "[+1ms] STEP 1 (HTTP INBOUND): Method=POST | Sender=MPESA | SIM=TILL_SIM | Raw=\"UK6DC1DCIM Confirmed. Ksh650.00 received from 254710720949 MERCY on 7/11/26 at 4:02 PM. New M-PESA balance is Ksh14,250.00.\"",
+    "[+3ms] STEP 2 (REGEX PARSE): Extracted Code=UK6DC1DCIM | Amount=KES 650 | Payer=\"Customer\" (no-phone)",
+    "[+1754ms] STEP 3 (DEDUP CHECK): Code UK6DC1DCIM is fresh (unused in Supabase)",
+    "[+2360ms] STEP 4 (ORDER SEARCH): Found 0 pending order(s) with total_price = KES 650",
+    "[+2362ms] STEP 5 (POOL SAVE): Saved receipt to till_receipt_pool.json with status=UNCLAIMED_POOL",
+    "[+2384ms] STEP 6 (WHATSAPP ALERT): Sent POOLED alert to Operations WhatsApp Group"
+  ]
+}
+====================================================================
+====================================================================
+TIMESTAMP: 2026-11-07T16:07:00.823Z | CLIENT IP: ::ffff:127.0.0.1
+[+0ms] STEP 1 (HTTP INBOUND): Method=POST | Sender=MPESA | SIM=TILL_SIM | Raw="UK6DC1DCIM Confirmed. Ksh650.00 received from 254710720949 MERCY"
+[+1ms] STEP 2 (REGEX PARSE): Extracted Code=UK6DC1DCIM | Amount=KES 650 | Payer="MERCY" (254710720949)
+[+425ms] STEP 3 (DEDUP CHECK): Code UK6DC1DCIM is fresh (unused in Supabase)
+[+749ms] STEP 4 (ORDER SEARCH): Found 0 pending order(s) with total_price = KES 650
+[+750ms] STEP 5 (POOL SAVE): Saved receipt to till_receipt_pool.json with status=UNCLAIMED_POOL
+[+751ms] STEP 6 (WHATSAPP ALERT): Sent POOLED alert to Operations WhatsApp Group
+FINAL SERVER JSON RESPONSE:
+{
+  "success": true,
+  "status": "POOLED",
+  "mpesa_code": "UK6DC1DCIM",
+  "amount": 650,
+  "payer_name": "MERCY",
+  "trace": [
+    "[+0ms] STEP 1 (HTTP INBOUND): Method=POST | Sender=MPESA | SIM=TILL_SIM | Raw=\"UK6DC1DCIM Confirmed. Ksh650.00 received from 254710720949 MERCY\"",
+    "[+1ms] STEP 2 (REGEX PARSE): Extracted Code=UK6DC1DCIM | Amount=KES 650 | Payer=\"MERCY\" (254710720949)",
+    "[+425ms] STEP 3 (DEDUP CHECK): Code UK6DC1DCIM is fresh (unused in Supabase)",
+    "[+749ms] STEP 4 (ORDER SEARCH): Found 0 pending order(s) with total_price = KES 650",
+    "[+750ms] STEP 5 (POOL SAVE): Saved receipt to till_receipt_pool.json with status=UNCLAIMED_POOL",
+    "[+751ms] STEP 6 (WHATSAPP ALERT): Sent POOLED alert to Operations WhatsApp Group"
+  ]
+}
+====================================================================
+====================================================================
+TIMESTAMP: 2026-11-07T16:32:46.481Z | CLIENT IP: ::ffff:127.0.0.1
+[+2ms] STEP 1 (HTTP INBOUND): Method=POST | Sender=MPESA | SIM=REDMI_TILL_SIM | Raw="UK6DC1DCIM Confirmed.on 6/11/26 at 4:35 PMKSH1.00 received from 254710720949 MERCY TRYPHEN EMURUGAT. New Account balance is KSH26.56. Transaction cost, KSH0.00. Receiving payments of Ksh 500 & below in your Lipa na M-PESA till is now FREE!"
+[+8ms] STEP 2 (REGEX PARSE): Extracted Code=UK6DC1DCIM | Direction=INFLOW | Amount=KES 1 | Fee=KES 0 | Balance=KES 26.56 | Counterparty="MERCY TRYPHEN EMURUGAT" (254710720949)
+[+1187ms] STEP 3 (DEDUP CHECK): Code UK6DC1DCIM is fresh (unused in Supabase)
+[+1688ms] STEP 4 (ORDER SEARCH): Found 0 pending order(s) with total_price = KES 1
+[+1689ms] STEP 5 (POOL SAVE): Saved receipt to till_receipt_pool.json with status=UNCLAIMED_POOL | TillBalance=26.56
+[+1712ms] STEP 6 (WHATSAPP ALERT): Sent POOLED alert to Operations WhatsApp Group
+FINAL SERVER JSON RESPONSE:
+{
+  "success": true,
+  "status": "POOLED",
+  "direction": "INFLOW",
+  "mpesa_code": "UK6DC1DCIM",
+  "amount": 1,
+  "fee": 0,
+  "reported_balance": 26.56,
+  "expected_balance": null,
+  "balance_variance": 0,
+  "payer_name": "MERCY TRYPHEN EMURUGAT",
+  "trace": [
+    "[+2ms] STEP 1 (HTTP INBOUND): Method=POST | Sender=MPESA | SIM=REDMI_TILL_SIM | Raw=\"UK6DC1DCIM Confirmed.on 6/11/26 at 4:35 PMKSH1.00 received from 254710720949 MERCY TRYPHEN EMURUGAT. New Account balance is KSH26.56. Transaction cost, KSH0.00. Receiving payments of Ksh 500 & below in your Lipa na M-PESA till is now FREE!\"",
+    "[+8ms] STEP 2 (REGEX PARSE): Extracted Code=UK6DC1DCIM | Direction=INFLOW | Amount=KES 1 | Fee=KES 0 | Balance=KES 26.56 | Counterparty=\"MERCY TRYPHEN EMURUGAT\" (254710720949)",
+    "[+1187ms] STEP 3 (DEDUP CHECK): Code UK6DC1DCIM is fresh (unused in Supabase)",
+    "[+1688ms] STEP 4 (ORDER SEARCH): Found 0 pending order(s) with total_price = KES 1",
+    "[+1689ms] STEP 5 (POOL SAVE): Saved receipt to till_receipt_pool.json with status=UNCLAIMED_POOL | TillBalance=26.56",
+    "[+1712ms] STEP 6 (WHATSAPP ALERT): Sent POOLED alert to Operations WhatsApp Group"
+  ]
+}
+====================================================================
+====================================================================
+TIMESTAMP: 2026-11-07T21:34:52.799Z | CLIENT IP: ::ffff:10.119.196.16
+[+1ms] STEP 1 (HTTP INBOUND): Method=POST | Sender=Safaricom | SIM=REDMI_NOTE_12 | Raw="You do not have an active data bundle. To continue enjoying seamless browsing, dial *544# and purchase your preferred bundle."
+[+10ms] STEP 2 (REGEX PARSE): Failed to extract M-Pesa 10-char code or KES amount -> Ignored non-receipt SMS
+FINAL SERVER JSON RESPONSE:
+{
+  "success": true,
+  "ignored": true,
+  "reason": "Not a valid M-Pesa confirmation receipt",
+  "raw_received": "You do not have an active data bundle. To continue enjoying seamless browsing, dial *544# and purchase your preferred bundle.",
+  "trace": [
+    "[+1ms] STEP 1 (HTTP INBOUND): Method=POST | Sender=Safaricom | SIM=REDMI_NOTE_12 | Raw=\"You do not have an active data bundle. To continue enjoying seamless browsing, dial *544# and purchase your preferred bundle.\"",
+    "[+10ms] STEP 2 (REGEX PARSE): Failed to extract M-Pesa 10-char code or KES amount -> Ignored non-receipt SMS"
+  ]
+}
+====================================================================
