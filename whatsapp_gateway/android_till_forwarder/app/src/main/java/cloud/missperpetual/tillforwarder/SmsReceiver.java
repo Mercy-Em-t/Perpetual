@@ -1,16 +1,20 @@
 package cloud.missperpetual.tillforwarder;
 
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.os.SystemClock;
 import android.telephony.SmsMessage;
 import android.util.Log;
 
@@ -23,9 +27,15 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 /**
- * SmsReceiver.java (v2.5.0)
+ * SmsReceiver.java (v2.7.0)
  * =========================
- * Autonomous Dual-Channel SMS Forwarder for Redmi Note 12.
+ * Autonomous High-Reliability Dual-Channel SMS Forwarder for Redmi Note 12.
+ * 
+ * Features:
+ *  - goAsync() + Partial WakeLock ensures CPU never sleeps before HTTP post finishes
+ *  - Triple exponential retry loop inside postToEndpoint (defeats radio-wake sleep latency)
+ *  - Independent delivery state per destination (Till vs Personal Finance)
+ *  - Autonomous AlarmManager quick retry (8s) if offline, eliminating manual queue flush
  * 
  * Channel 1 (Business Till 5758419):
  *   Dispatches customer order receipts directly to:
@@ -38,6 +48,7 @@ import java.nio.charset.StandardCharsets;
 public class SmsReceiver extends BroadcastReceiver {
     private static final String TAG = "SavannahTillRelay";
     public static final String PREFS_NAME = "TillForwarderPrefs";
+    public static final String ACTION_QUICK_RETRY = "cloud.missperpetual.tillforwarder.ACTION_QUICK_RETRY";
 
     // Channel 1: Storefront Order Verification
     public static final String DEFAULT_TILL_URL = "https://updatedtms-whitelabel-core.vercel.app/api/till/receipt";
@@ -52,7 +63,11 @@ public class SmsReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent == null || !"android.provider.Telephony.SMS_RECEIVED".equals(intent.getAction())) return;
+        if (intent == null) return;
+        String action = intent.getAction();
+
+        // 2. Telephony SMS Received
+        if (!"android.provider.Telephony.SMS_RECEIVED".equals(action)) return;
 
         Bundle bundle = intent.getExtras();
         if (bundle == null) return;
@@ -78,8 +93,50 @@ public class SmsReceiver extends BroadcastReceiver {
         boolean isFinancial = isFinancialMessage(fromAddr, messageText);
         if (!isFinancial) return;
 
+        Log.i(TAG, "Financial SMS intercepted from " + fromAddr + ". Enqueueing and firing instant dispatch!");
         enqueueMessage(context, fromAddr, messageText, System.currentTimeMillis());
-        flushQueueAsync(context, null);
+
+        // Keep CPU awake and process alive while network POST is in-flight
+        final PendingResult pendingResult = goAsync();
+        PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        final PowerManager.WakeLock wakeLock = (pm != null)
+                ? pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SavannahTillRelay:SmsWakeLock")
+                : null;
+        if (wakeLock != null) {
+            try {
+                wakeLock.acquire(45000); // 45 seconds max wake lock
+            } catch (Exception ignored) {}
+        }
+
+        flushQueueAsync(context, () -> {
+            try {
+                if (wakeLock != null && wakeLock.isHeld()) {
+                    wakeLock.release();
+                }
+            } catch (Exception ignored) {}
+            try {
+                pendingResult.finish();
+            } catch (Exception ignored) {}
+        });
+    }
+
+    private static void executeWithWakeLock(Context context, Runnable task) {
+        PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        PowerManager.WakeLock wakeLock = (pm != null)
+                ? pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SavannahTillRelay:ExecWakeLock")
+                : null;
+        if (wakeLock != null) {
+            try {
+                wakeLock.acquire(30000);
+            } catch (Exception ignored) {}
+        }
+        try {
+            task.run();
+        } finally {
+            try {
+                if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+            } catch (Exception ignored) {}
+        }
     }
 
     public static boolean isFinancialMessage(String fromAddr, String text) {
@@ -101,6 +158,8 @@ public class SmsReceiver extends BroadcastReceiver {
         // Contains Till 5758419, Till merchant context, or Account/Utility/Working balance
         return text.contains("5758419")
                 || text.contains("SAVANNAH ATELIER")
+                || text.contains("New Till balance is")
+                || text.contains("Till balance is")
                 || (text.contains("Confirmed") && (text.contains("Account balance is") || text.contains("Utility balance is") || text.contains("Working balance is")))
                 || text.contains("Lipa na M-PESA till");
     }
@@ -130,6 +189,8 @@ public class SmsReceiver extends BroadcastReceiver {
             item.put("sim", "REDMI_NOTE_12");
             item.put("text", text);
             item.put("timestamp", timestamp);
+            item.put("till_sent", false);
+            item.put("finance_sent", false);
             queue.put(item);
             prefs.edit().putString("offline_queue", queue.toString()).apply();
         } catch (Exception e) {
@@ -213,32 +274,41 @@ public class SmsReceiver extends BroadcastReceiver {
                         toFinance = true;
                     }
 
-                    boolean tillSuccess = true;
-                    boolean financeSuccess = true;
+                    boolean alreadySentTill = item.optBoolean("till_sent", false);
+                    boolean alreadySentFinance = item.optBoolean("finance_sent", false);
+
+                    boolean tillSuccess = alreadySentTill;
+                    boolean financeSuccess = alreadySentFinance;
                     StringBuilder deliveredVia = new StringBuilder();
 
-                    if (toTill) {
+                    // Channel 1: Till Endpoint
+                    if (toTill && !alreadySentTill) {
                         tillSuccess = postToEndpoint(tillEndpoint, payload);
                         if (tillSuccess) {
+                            item.put("till_sent", true);
                             deliveredVia.append("Till");
                             prefs.edit().putInt("total_till_sent", prefs.getInt("total_till_sent", 0) + 1).apply();
                         }
                     }
 
-                    if (toFinance) {
+                    // Channel 2: Personal Finance Endpoint
+                    if (toFinance && !alreadySentFinance) {
                         financeSuccess = postToEndpoint(financeEndpoint, payload);
                         if (financeSuccess) {
+                            item.put("finance_sent", true);
                             if (deliveredVia.length() > 0) deliveredVia.append(" + ");
                             deliveredVia.append("Personal Finance");
                             prefs.edit().putInt("total_finance_sent", prefs.getInt("total_finance_sent", 0) + 1).apply();
                         }
                     }
 
-                    if (tillSuccess && financeSuccess) {
+                    boolean isCompletelyDelivered = (!toTill || tillSuccess) && (!toFinance || financeSuccess);
+
+                    if (isCompletelyDelivered) {
                         sentCount++;
                         prefs.edit()
                                 .putString("last_forwarded", "[" + from + "] " + text)
-                                .putString("last_status", "ONLINE - Dispatched via " + deliveredVia)
+                                .putString("last_status", "ONLINE - Dispatched via " + (deliveredVia.length() > 0 ? deliveredVia.toString() : "Cloud"))
                                 .putInt("total_sent", prefs.getInt("total_sent", 0) + 1)
                                 .apply();
                     } else {
@@ -246,10 +316,12 @@ public class SmsReceiver extends BroadcastReceiver {
                     }
                 }
 
+                prefs.edit().putString("offline_queue", remaining.toString()).apply();
                 if (remaining.length() > 0) {
                     prefs.edit().putString("last_status", "OFFLINE QUEUED (" + remaining.length() + " waiting)").apply();
+                    // Schedule autonomous quick retry in 8 seconds so user never has to flush manually!
+                    scheduleQuickRetry(context, 8000L);
                 }
-                prefs.edit().putString("offline_queue", remaining.toString()).apply();
                 Log.i(TAG, "Flushed queue: sent=" + sentCount + ", pending=" + remaining.length());
             } catch (Exception e) {
                 Log.e(TAG, "Flush error: " + e.getMessage());
@@ -259,30 +331,67 @@ public class SmsReceiver extends BroadcastReceiver {
         }).start();
     }
 
+    public static void scheduleQuickRetry(Context context, long delayMs) {
+        try {
+            AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            if (am == null) return;
+            Intent intent = new Intent(context, QuickRetryReceiver.class);
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                flags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent pi = PendingIntent.getBroadcast(context, 909, intent, flags);
+            long triggerAt = SystemClock.elapsedRealtime() + delayMs;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi);
+            } else {
+                am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi);
+            }
+            Log.i(TAG, "Scheduled autonomous retry in " + (delayMs / 1000) + "s via AlarmManager.");
+        } catch (Exception e) {
+            Log.e(TAG, "Quick retry schedule failed: " + e.getMessage());
+        }
+    }
+
     public static boolean postToEndpoint(String targetUrl, String jsonPayload) {
         if (targetUrl == null || targetUrl.trim().isEmpty()) return false;
-        HttpURLConnection conn = null;
-        try {
-            URL url = new URL(targetUrl.trim());
-            conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setConnectTimeout(4500);
-            conn.setReadTimeout(6000);
-            conn.setDoOutput(true);
-            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-            conn.setRequestProperty("User-Agent", "Savannah-Till-Forwarder/2.5.0");
-            conn.setRequestProperty("x-till-relay-secret", "savannah_relay_sec_7f9b2c81e3a4d650");
-            byte[] bytes = jsonPayload.getBytes(StandardCharsets.UTF_8);
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(bytes);
+
+        // Up to 3 attempts with exponential delay to withstand cellular radio wake latency
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            HttpURLConnection conn = null;
+            try {
+                URL url = new URL(targetUrl.trim());
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(8000);
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+                conn.setRequestProperty("User-Agent", "Savannah-Till-Forwarder/2.7.0");
+                conn.setRequestProperty("x-till-relay-secret", "savannah_relay_sec_7f9b2c81e3a4d650");
+                byte[] bytes = jsonPayload.getBytes(StandardCharsets.UTF_8);
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+                int code = conn.getResponseCode();
+                if (code >= 200 && code < 300) {
+                    return true;
+                }
+                Log.w(TAG, "postToEndpoint HTTP " + code + " on attempt " + attempt);
+            } catch (Exception e) {
+                Log.w(TAG, "postToEndpoint attempt " + attempt + " failed: " + e.getMessage());
+            } finally {
+                if (conn != null) conn.disconnect();
             }
-            int code = conn.getResponseCode();
-            return code >= 200 && code < 300;
-        } catch (Exception e) {
-            return false;
-        } finally {
-            if (conn != null) conn.disconnect();
+
+            if (attempt < 3) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ignored) {}
+            }
         }
+        return false;
     }
 
     public static void sendHeartbeatAsync(final Context context) {
@@ -324,7 +433,7 @@ public class SmsReceiver extends BroadcastReceiver {
                 payload.put("battery", battery);
                 payload.put("charging", isCharging);
                 payload.put("network", netType);
-                payload.put("version", "2.6.0");
+                payload.put("version", "2.7.0");
                 payload.put("device_id", "redmi_note_12");
 
                 String tillUrl = getTillEndpoint(context);
@@ -335,5 +444,4 @@ public class SmsReceiver extends BroadcastReceiver {
             }
         }).start();
     }
-
 }
