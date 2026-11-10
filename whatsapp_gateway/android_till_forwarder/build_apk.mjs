@@ -55,21 +55,11 @@ const alignedApk = path.join(buildDir, 'aligned.apk');
 if (fs.existsSync(alignedApk)) fs.unlinkSync(alignedApk);
 execSync(`"${path.join(btDir, 'zipalign.exe')}" -f -p 4 "${unalignedApk}" "${alignedApk}"`, { stdio: 'inherit' });
 
-console.log('7. Signing APK with apksigner...');
+console.log('7. Signing APK with apksigner using original release keystore...');
 const keystore = path.join(projDir, 'savannah-release.jks');
 const finalApk = path.join(projDir, 'SavannahTillRelay.apk');
 
-// Try with existing keystore or generate clean key if needed
-try {
-  execSync(`"${path.join(btDir, 'apksigner.bat')}" sign --ks "${keystore}" --ks-pass pass:savannah123 --out "${finalApk}" "${alignedApk}"`, { stdio: 'inherit' });
-} catch (e) {
-  console.log('Signing with debug/generated key...');
-  const newKs = path.join(projDir, 'relay-sign.jks');
-  if (!fs.existsSync(newKs)) {
-    execSync(`"${path.join(javaBin, 'keytool.exe')}" -genkey -v -keystore "${newKs}" -alias savannah -keyalg RSA -keysize 2048 -validity 10000 -storepass savannah123 -keypass savannah123 -dname "CN=Savannah, O=Perpetual, C=KE"`, { stdio: 'inherit' });
-  }
-  execSync(`"${path.join(btDir, 'apksigner.bat')}" sign --ks "${newKs}" --ks-pass pass:savannah123 --out "${finalApk}" "${alignedApk}"`, { stdio: 'inherit' });
-}
+execSync(`"${path.join(btDir, 'apksigner.bat')}" sign --ks "${keystore}" --ks-pass pass:savannah2026 --key-pass pass:savannah2026 --out "${finalApk}" "${alignedApk}"`, { stdio: 'inherit' });
 
 console.log('8. Verifying signed APK...');
 execSync(`"${path.join(btDir, 'apksigner.bat')}" verify "${finalApk}"`, { stdio: 'inherit' });
