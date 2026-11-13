@@ -84,6 +84,70 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
       }
     }
 
+    // GET /api/groups/invites (Fetches or generates invite links for all departmental groups)
+    if (req.method === "GET" && parsedUrl.pathname === "/api/groups/invites") {
+      try {
+        const sock = getSock ? getSock() : null;
+        if (!sock) {
+          res.writeHead(503);
+          return res.end(JSON.stringify({ error: "Socket not ready" }));
+        }
+        const invites = {};
+        for (const [key, grp] of Object.entries(GROUPS)) {
+          if (!grp.jid) continue;
+          try {
+            const code = await sock.groupInviteCode(grp.jid);
+            invites[key] = {
+              name: grp.name,
+              jid: grp.jid,
+              invite_url: `https://chat.whatsapp.com/${code}`
+            };
+          } catch (e) {
+            invites[key] = {
+              name: grp.name,
+              jid: grp.jid,
+              error: e.message
+            };
+          }
+        }
+        res.writeHead(200);
+        return res.end(JSON.stringify({ success: true, invites }));
+      } catch (err) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ error: err.message }));
+      }
+    }
+
+    // POST /api/groups/add-participant (Directly adds a phone number to a group)
+    if (req.method === "POST" && parsedUrl.pathname === "/api/groups/add-participant") {
+      try {
+        const sock = getSock ? getSock() : null;
+        if (!sock) {
+          res.writeHead(503);
+          return res.end(JSON.stringify({ error: "Socket not ready" }));
+        }
+        const body = await parseJsonBody(req);
+        const { groupJid, phone, role } = body;
+        const targetJid = groupJid || (role && GROUPS[role]?.jid) || GROUPS.general.jid;
+        
+        if (!phone) {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: "Missing 'phone' number" }));
+        }
+        const digits = phone.replace(/\D/g, "");
+        const cleanDigits = digits.startsWith("0") ? `254${digits.slice(1)}` : (digits.startsWith("254") ? digits : `254${digits}`);
+        const userJid = `${cleanDigits}@s.whatsapp.net`;
+
+        const updateResult = await sock.groupParticipantsUpdate(targetJid, [userJid], "add");
+        res.writeHead(200);
+        return res.end(JSON.stringify({ success: true, userJid, targetJid, result: updateResult }));
+      } catch (err) {
+        console.error("[ADD PARTICIPANT ERROR]", err);
+        res.writeHead(500);
+        return res.end(JSON.stringify({ error: err.message }));
+      }
+    }
+
     // POST /api/shops/provision
     if (req.method === "POST" && parsedUrl.pathname === "/api/shops/provision") {
       try {
