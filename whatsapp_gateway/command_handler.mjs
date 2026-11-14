@@ -5,6 +5,15 @@
  * and double-confirmation safety guards.
  */
 import { GROUPS, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "./config.mjs";
+import { sharedOrderGuard } from "./http_routes.mjs";
+import {
+  createSupportTicket,
+  claimSupportTicket,
+  resolveSupportTicket,
+  listSupportTickets,
+  formatTicketCard
+} from "./support_tickets.mjs";
+import { runScalingCheck } from "./scaling_sentinel.mjs";
 import {
   resolveGroupContext,
   resolveShopOrder,
@@ -26,7 +35,8 @@ export const KNOWN_COMMANDS = [
   "approve", "hide", "drafts", "policy",
   "resurrect", "revive", "reorder", "repeat", "buyagain",
   "shop", "shops", "stores", "bind",
-  "ticket", "resolve"
+  "pool", "tier", "approve-order", "decline-order",
+  "ticket", "tickets", "claim", "resolve", "sentinel"
 ];
 
 const dbHdrs = {
@@ -251,7 +261,7 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
   const isMgmt = context.role === "MANAGEMENT";
 
   // Platform-only commands not applicable to shop groups
-  const platformOnlyCommands = ["shops", "stores", "bind", "ticket", "resolve"];
+  const platformOnlyCommands = ["shops", "stores", "bind", "ticket", "tickets", "claim", "resolve", "sentinel"];
   const bareCommand = command.replace(/^!/, "");
   if (platformOnlyCommands.includes(bareCommand)) {
     await safeSendMessage(replyJid, {
@@ -397,6 +407,24 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
         return;
       }
 
+      // Commit Order Guard hold if one exists for this order
+      let ogCommit = await sharedOrderGuard.commitOrder(o.id);
+      if (!ogCommit.success && ogCommit.code === "HOLD_NOT_FOUND" && o.notes) {
+        ogCommit = await sharedOrderGuard.commitOrder(String(o.notes).split("|")[0].trim());
+      }
+      if (!ogCommit.success && ogCommit.code === "REFUND_REQUIRED") {
+        await safeSendMessage(replyJid, {
+          text: `⚠️ *Cannot Settle — Stock Sold Out After Hold Expiry!*\nOrder \`${orderId}\` expired and ${ogCommit.item || "item"} is now sold out. Please refund customer.`
+        });
+        return;
+      }
+      if (!ogCommit.success && ogCommit.code === "APPROVAL_REQUIRED") {
+        await safeSendMessage(replyJid, {
+          text: `⚠️ *Approval Required First:* Run \`!approve-order ${o.id}\` before marking paid.`
+        });
+        return;
+      }
+
       const displayId = formatDisplayOrderId(o);
       const reply =
         `🔍 *[ORDER DETAILS - ${shop.name.toUpperCase()}]*\n` +
@@ -434,6 +462,24 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
       const o = await resolveShopOrder(shop.id, orderId);
       if (!o) {
         await safeSendMessage(replyJid, { text: `❌ Order \`${orderId}\` not found for ${shop.name}.` });
+        return;
+      }
+
+      // Commit Order Guard hold if one exists for this order
+      let ogCommit = await sharedOrderGuard.commitOrder(o.id);
+      if (!ogCommit.success && ogCommit.code === "HOLD_NOT_FOUND" && o.notes) {
+        ogCommit = await sharedOrderGuard.commitOrder(String(o.notes).split("|")[0].trim());
+      }
+      if (!ogCommit.success && ogCommit.code === "REFUND_REQUIRED") {
+        await safeSendMessage(replyJid, {
+          text: `⚠️ *Cannot Settle — Stock Sold Out After Hold Expiry!*\nOrder \`${orderId}\` expired and ${ogCommit.item || "item"} is now sold out. Please refund customer.`
+        });
+        return;
+      }
+      if (!ogCommit.success && ogCommit.code === "APPROVAL_REQUIRED") {
+        await safeSendMessage(replyJid, {
+          text: `⚠️ *Approval Required First:* Run \`!approve-order ${o.id}\` before marking paid.`
+        });
         return;
       }
 
@@ -496,6 +542,24 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
       const o = await resolveShopOrder(shop.id, orderId);
       if (!o) {
         await safeSendMessage(replyJid, { text: `❌ Order \`${orderId}\` not found for ${shop.name}.` });
+        return;
+      }
+
+      // Commit Order Guard hold if one exists for this order
+      let ogCommit = await sharedOrderGuard.commitOrder(o.id);
+      if (!ogCommit.success && ogCommit.code === "HOLD_NOT_FOUND" && o.notes) {
+        ogCommit = await sharedOrderGuard.commitOrder(String(o.notes).split("|")[0].trim());
+      }
+      if (!ogCommit.success && ogCommit.code === "REFUND_REQUIRED") {
+        await safeSendMessage(replyJid, {
+          text: `⚠️ *Cannot Settle — Stock Sold Out After Hold Expiry!*\nOrder \`${orderId}\` expired and ${ogCommit.item || "item"} is now sold out. Please refund customer.`
+        });
+        return;
+      }
+      if (!ogCommit.success && ogCommit.code === "APPROVAL_REQUIRED") {
+        await safeSendMessage(replyJid, {
+          text: `⚠️ *Approval Required First:* Run \`!approve-order ${o.id}\` before marking paid.`
+        });
         return;
       }
 
@@ -631,6 +695,120 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
   // 10. 1-Tap Re-order: !reorder <order_id> or !repeat or !buyagain
   if (command === "!reorder" || command === "!repeat" || command === "!buyagain") {
     return await handleReorderCommand(args, replyJid, senderId, callerName, safeSendMessage, shop);
+  }
+
+  // 11. Order Guard Pool, Tiers & Approval: !pool, !tier, !approve-order, !decline-order
+  if (command === "!pool" || command === "!tier" || command === "!approve-order" || command === "!decline-order") {
+    if (!isMgmt) {
+      await safeSendMessage(replyJid, {
+        text: `🔒 *Access Restricted*\nOrder Guard pool & approval controls are restricted to *${shop.name} Management*.`
+      });
+      return;
+    }
+
+    if (command === "!pool") {
+      const parts = (args || "").trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 0 || parts[0].toLowerCase() === "today") {
+        const summary = await sharedOrderGuard.getDailyStockSummary(shop.id);
+        if (summary.items.length === 0) {
+          await safeSendMessage(replyJid, { text: `📦 *${shop.name} Daily Pool (${summary.sale_date} EAT)*\nNo capped items configured yet.\nUsage: \`!pool <item> cap <N>\` or \`!pool <item> max <N>\`` });
+          return;
+        }
+        const lines = summary.items.map(it =>
+          `• *${it.name}* (\`${it.item_id}\`): ${it.available === null ? "∞" : it.available} left | held ${it.held} | sold ${it.sold} | cap ${it.daily_cap ?? "∞"} | max/order ${it.max_per_order ?? "∞"} [${it.partial_fill_mode}]`
+        ).join("\n");
+        await safeSendMessage(replyJid, { text: `📦 *${shop.name} Daily Pool (${summary.sale_date} EAT)*\n${lines}` });
+        return;
+      }
+
+      // !pool <item> cap <N> | !pool <item> max <N> | !pool <item> mode <strict|surebet>
+      if (parts.length >= 3) {
+        const action = parts[parts.length - 2].toLowerCase();
+        const valRaw = parts[parts.length - 1];
+        const itemQuery = parts.slice(0, parts.length - 2).join(" ");
+        if (action === "cap") {
+          const cap = Number(valRaw);
+          if (!Number.isFinite(cap) || cap < 0) {
+            await safeSendMessage(replyJid, { text: `⚠️ Invalid cap value: \`${valRaw}\`` });
+            return;
+          }
+          const updated = await sharedOrderGuard.configureItemPolicy(shop.id, itemQuery, { daily_cap: cap });
+          await safeSendMessage(replyJid, { text: `✅ *Daily Cap Updated:* \`${updated.item_id}\` -> *${updated.daily_cap}/day* (resets midnight EAT)` });
+          return;
+        }
+        if (action === "max") {
+          const maxOrd = Number(valRaw);
+          if (!Number.isFinite(maxOrd) || maxOrd < 1) {
+            await safeSendMessage(replyJid, { text: `⚠️ Invalid max-per-order value: \`${valRaw}\`` });
+            return;
+          }
+          const updated = await sharedOrderGuard.configureItemPolicy(shop.id, itemQuery, { max_per_order: maxOrd });
+          await safeSendMessage(replyJid, { text: `✅ *Max Per Order Updated:* \`${updated.item_id}\` -> *${updated.max_per_order}/order*` });
+          return;
+        }
+        if (action === "mode") {
+          const mode = valRaw.toLowerCase();
+          if (mode !== "strict" && mode !== "surebet") {
+            await safeSendMessage(replyJid, { text: `⚠️ Mode must be \`strict\` or \`surebet\`.` });
+            return;
+          }
+          const updated = await sharedOrderGuard.configureItemPolicy(shop.id, itemQuery, { partial_fill_mode: mode });
+          await safeSendMessage(replyJid, { text: `✅ *Fill Mode Updated:* \`${updated.item_id}\` -> *${updated.partial_fill_mode}*` });
+          return;
+        }
+      }
+
+      await safeSendMessage(replyJid, {
+        text: `⚠️ *Usage:*\n• \`!pool\` or \`!pool today\`\n• \`!pool <item> cap <N>\`\n• \`!pool <item> max <N>\`\n• \`!pool <item> mode <strict|surebet>\``
+      });
+      return;
+    }
+
+    if (command === "!tier") {
+      const [phone, tier] = (args || "").trim().split(/\s+/);
+      if (!phone || !tier) {
+        await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!tier <phone> <retail|wholesale|trusted|flagged>\`` });
+        return;
+      }
+      try {
+        const res = await sharedOrderGuard.setCustomerTier(shop.id, phone, tier);
+        await safeSendMessage(replyJid, { text: `✅ *Customer Tier Updated:* \`${res.customer_hash}\` -> *${res.tier.toUpperCase()}*` });
+      } catch (err) {
+        await safeSendMessage(replyJid, { text: `❌ ${err.message}` });
+      }
+      return;
+    }
+
+    if (command === "!approve-order") {
+      const orderId = (args || "").trim().split(/\s+/)[0];
+      if (!orderId) {
+        await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!approve-order <order_id>\`` });
+        return;
+      }
+      const res = await sharedOrderGuard.approveHeldOrder(orderId, shop.id);
+      const mins = Math.round(sharedOrderGuard.defaultHoldTtlMs / 60000);
+      await safeSendMessage(replyJid, {
+        text: res.success
+          ? `✅ *Order Approved for Payment:* \`${orderId}\` (Till unlocked for ${mins} mins)`
+          : `❌ Could not approve \`${orderId}\`: ${res.error || res.code}`
+      });
+      return;
+    }
+
+    if (command === "!decline-order") {
+      const orderId = (args || "").trim().split(/\s+/)[0];
+      if (!orderId) {
+        await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!decline-order <order_id>\`` });
+        return;
+      }
+      const res = await sharedOrderGuard.releaseOrder(orderId, "DECLINED", shop.id);
+      await safeSendMessage(replyJid, {
+        text: res.success
+          ? `🛑 *Order Declined & Stock Released:* \`${orderId}\` returned to buyable pool.`
+          : `❌ Could not decline \`${orderId}\`: ${res.error || res.code}`
+      });
+      return;
+    }
   }
 
   // Fallback
@@ -1372,28 +1550,71 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
     }
   }
 
-  // 4. Incident Tickets: !ticket, !resolve
+  // 4. Incident Tickets & Support Workflow: !ticket, !tickets, !claim, !resolve, !sentinel
   if (command === "!ticket") {
     if (!args) {
       await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!ticket <description of issue>\`` });
       return;
     }
-    const ticketId = `TICK-${Date.now().toString().slice(-6)}`;
-    const ticketCard =
-      `🚨 *NEW INCIDENT TICKET LOGGED*\n\n` +
-      `• *Ticket ID:* \`${ticketId}\`\n` +
-      `• *Description:* ${args}\n` +
-      `• *Reported By:* @${callerName}\n` +
-      `• *Timestamp:* ${new Date().toLocaleString()}\n` +
-      `• *Status:* OPEN ⚠️\n\n` +
-      `_Routed to Perpetua IT Helpdesk._\n` +
-      `_To resolve: \`!resolve ${ticketId} [notes]\`_`;
+    const ticket = createSupportTicket({
+      title: args.slice(0, 80),
+      description: args,
+      source: "WHATSAPP_CMD",
+      severity: /urgent|down|critical|fail|stuck/i.test(args) ? "HIGH" : "MEDIUM",
+      reportedBy: `@${callerName}`
+    });
+    const ticketCard = formatTicketCard(ticket);
 
     const itJid = GROUPS?.itHelpdesk?.jid || "120363432040872305@g.us";
     if (replyJid !== itJid) {
       await safeSendMessage(itJid, { text: ticketCard });
     }
     await safeSendMessage(replyJid, { text: ticketCard });
+    return;
+  }
+
+  if (command === "!tickets") {
+    const active = listSupportTickets({ status: "ACTIVE" });
+    if (!active.length) {
+      await safeSendMessage(replyJid, { text: `✅ *All Clear!* Zero open support incidents.` });
+      return;
+    }
+    const lines = active.slice(-15).map((t) => {
+      const mins = Math.max(0, Math.floor((Date.now() - new Date(t.createdAt).getTime()) / 60000));
+      const owner = t.claimedBy ? ` (${t.claimedBy})` : "";
+      return `• \`${t.id}\` [${t.status}${owner}] — ${t.title} (${mins}m ago)`;
+    });
+    await safeSendMessage(replyJid, {
+      text:
+        `🎫 *ACTIVE SUPPORT INCIDENTS (${active.length})*\n\n` +
+        lines.join("\n") +
+        `\n\n_Use \`!claim <id>\` or \`!resolve <id> [notes]\` to progress._`
+    });
+    return;
+  }
+
+  if (command === "!claim") {
+    const ticketId = args.trim().split(/\s+/)[0];
+    if (!ticketId) {
+      await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!claim <ticket_id>\`` });
+      return;
+    }
+    const updated = claimSupportTicket(ticketId, `@${callerName}`);
+    if (!updated) {
+      await safeSendMessage(replyJid, { text: `❌ Ticket \`${ticketId}\` not found.` });
+      return;
+    }
+    const claimCard =
+      `🛠️ *INCIDENT CLAIMED — INVESTIGATING*\n` +
+      `• *Ticket ID:* \`${updated.id}\`\n` +
+      `• *Assigned To:* @${callerName}\n` +
+      `• *Issue:* ${updated.title}\n\n` +
+      `_When fixed: \`!resolve ${updated.id} [resolution notes]\`_`;
+    const itJid = GROUPS?.itHelpdesk?.jid || "120363432040872305@g.us";
+    if (replyJid !== itJid) {
+      await safeSendMessage(itJid, { text: claimCard });
+    }
+    await safeSendMessage(replyJid, { text: claimCard });
     return;
   }
 
@@ -1405,18 +1626,39 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
     }
     const ticketId = match[1];
     const notes = match[2] || "Resolved by operator";
+    const resolved = resolveSupportTicket(ticketId, notes, `@${callerName}`);
     const resolveCard =
       `✅ *INCIDENT TICKET RESOLVED*\n\n` +
-      `• *Ticket ID:* \`${ticketId}\`\n` +
+      `• *Ticket ID:* \`${resolved ? resolved.id : ticketId}\`\n` +
       `• *Resolved By:* @${callerName}\n` +
       `• *Notes:* ${notes}\n` +
-      `• *Status:* CLOSED ✅`;
+      `• *Status:* RESOLVED ✅`;
 
     const itJid = GROUPS?.itHelpdesk?.jid || "120363432040872305@g.us";
     if (replyJid !== itJid) {
       await safeSendMessage(itJid, { text: resolveCard });
     }
     await safeSendMessage(replyJid, { text: resolveCard });
+    return;
+  }
+
+  if (command === "!sentinel") {
+    const forceAlert = args.toLowerCase().includes("alert");
+    const report = await runScalingCheck({ safeSendMessage, forceAlert });
+    const statusEmoji =
+      report.level === "CRITICAL" ? "🚨" : report.level === "WARNING" ? "⚠️" : "🟢";
+    await safeSendMessage(replyJid, {
+      text:
+        `${statusEmoji} *SCALING SENTINEL REPORT*\n\n` +
+        `• *Health State:* ${report.level}\n` +
+        `• *Active Shops:* ${report.metrics.activeShops} / ${report.thresholds.shopsCritical} (50-shop Edge target)\n` +
+        `• *Orders (Last 1h):* ${report.metrics.ordersLastHour} / ${report.thresholds.ordersPerHourCritical}\n` +
+        `• *Supabase Latency:* ${report.metrics.probeLatencyMs}ms (HTTP ${report.metrics.probeStatus})\n` +
+        `• *Open Support Tickets:* ${report.metrics.openSupportTickets}\n` +
+        (report.triggers.length
+          ? `\n*Triggers:*\n${report.triggers.map((t) => `  - ${t}`).join("\n")}\n`
+          : `\n_All metrics comfortably within pilot safe bounds._`)
+    });
     return;
   }
 

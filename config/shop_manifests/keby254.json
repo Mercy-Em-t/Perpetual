@@ -1,0 +1,156 @@
+{
+  "shop_id": "e254e254-0254-4254-8254-000000000254",
+  "shop_slug": "keby254",
+  "name": "KEby254",
+  "logo_emoji": "🇰🇪",
+  "tagline": "Beauty, Hair & Craft Essentials 🇰🇪",
+  "accent_color": "#006600",
+  "industry": "beauty-and-essentials",
+  "currency": "KES",
+  "order_prefix": "KE254",
+  "mpesa_till_number": "5758419",
+  "whatsapp_groups": {},
+  "products": [
+    {
+      "sku": "keby254-hair-clips",
+      "name": "Hair Clips",
+      "category": "Hair Accessories",
+      "price": 150,
+      "description": "Strong-grip everyday & styling hair clips (pack).",
+      "daily_cap": 50,
+      "max_per_order": 10,
+      "max_per_customer_per_day": 15,
+      "partial_fill_mode": "strict",
+      "attributes": {
+        "pack_size": "6 pcs",
+        "colors": ["Black", "Tortoise", "Matte Brown", "Assorted"]
+      }
+    },
+    {
+      "sku": "keby254-hairband-pack",
+      "name": "Hairband Pack",
+      "category": "Hair Accessories",
+      "price": 200,
+      "description": "Soft stretch no-snag hairband pack.",
+      "daily_cap": 40,
+      "max_per_order": 8,
+      "max_per_customer_per_day": 12,
+      "partial_fill_mode": "strict",
+      "attributes": {
+        "pack_size": "10 bands",
+        "colors": ["Black", "Nude Mix", "Pastel Mix"]
+      }
+    },
+    {
+      "sku": "keby254-shower-cap",
+      "name": "Shower Cap",
+      "category": "Bath & Hair Care",
+      "price": 250,
+      "description": "Waterproof double-lined elastic shower cap.",
+      "daily_cap": 35,
+      "max_per_order": 5,
+      "max_per_customer_per_day": 10,
+      "partial_fill_mode": "strict",
+      "attributes": {
+        "colors": ["Black", "Rose Pink", "Emerald", "Clear"]
+      }
+    },
+    {
+      "sku": "keby254-eye-pencil",
+      "name": "Eye Pencil",
+      "category": "Makeup",
+      "price": 180,
+      "description": "Smudge-proof eye pencil available in Thick & Thin tips across multiple color variations.",
+      "daily_cap": 60,
+      "max_per_order": 10,
+      "max_per_customer_per_day": 15,
+      "partial_fill_mode": "surebet",
+      "attributes": {
+        "thickness": ["Thick", "Thin"],
+        "colors": ["Jet Black", "Dark Brown", "Espresso", "Midnight Blue", "Forest Green", "Burgundy"]
+      }
+    },
+    {
+      "sku": "keby254-satin-bonnet",
+      "name": "Satin Bonnet (Double-Sided)",
+      "category": "Bath & Hair Care",
+      "price": 550,
+      "description": "Reversible double-sided satin bonnet. Choose colors for both sides, or pick one side and the other is automatically Black.",
+      "daily_cap": 30,
+      "max_per_order": 5,
+      "max_per_customer_per_day": 8,
+      "partial_fill_mode": "strict",
+      "attributes": {
+        "reversible": true,
+        "side_1_colors": ["Black", "Wine Red", "Royal Blue", "Emerald", "Champagne", "Blush Pink", "Purple"],
+        "side_2_colors": ["Black", "Wine Red", "Royal Blue", "Emerald", "Champagne", "Blush Pink", "Purple"],
+        "default_second_side": "Black"
+      }
+    },
+    {
+      "sku": "keby254-spray-bottle",
+      "name": "Spray Bottle",
+      "category": "Hair Tools",
+      "price": 300,
+      "description": "Continuous fine-mist water & leave-in spray bottle.",
+      "daily_cap": 30,
+      "max_per_order": 5,
+      "max_per_customer_per_day": 8,
+      "partial_fill_mode": "strict",
+      "attributes": {
+        "capacity_ml": 300,
+        "colors": ["Clear/Black", "Matte Black", "Frosted White"]
+      }
+    },
+    {
+      "sku": "keby254-beauty-blender",
+      "name": "Beauty Blender",
+      "category": "Makeup",
+      "price": 200,
+      "description": "Latex-free soft teardrop makeup blending sponge.",
+      "daily_cap": 50,
+      "max_per_order": 10,
+      "max_per_customer_per_day": 15,
+      "partial_fill_mode": "surebet",
+      "attributes": {
+        "colors": ["Rose", "Black", "Nude", "Lilac"]
+      }
+    },
+    {
+      "sku": "keby254-crochet-hook",
+      "name": "Crochet Hook",
+      "category": "Hair & Craft Tools",
+      "price": 220,
+      "description": "Ergonomic crochet hook available in multiple sizes with color-coded handles per size.",
+      "daily_cap": 45,
+      "max_per_order": 10,
+      "max_per_customer_per_day": 15,
+      "partial_fill_mode": "strict",
+      "attributes": {
+        "sizes_by_color": {
+          "2.5mm": "Teal",
+          "3.0mm": "Coral Pink",
+          "3.5mm": "Mustard Gold",
+          "4.0mm": "Royal Blue",
+          "5.0mm": "Emerald Green",
+          "6.0mm": "Plum Purple"
+        }
+      }
+    },
+    {
+      "sku": "keby254-safety-pins",
+      "name": "Safety Pins",
+      "category": "Essentials",
+      "price": 100,
+      "description": "Rust-resistant assorted safety pins pack.",
+      "daily_cap": 80,
+      "max_per_order": 15,
+      "max_per_customer_per_day": 25,
+      "partial_fill_mode": "surebet",
+      "attributes": {
+        "pack_size": "24 pcs",
+        "finishes": ["Silver", "Gold", "Matte Black"]
+      }
+    }
+  ]
+}

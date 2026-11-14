@@ -158,6 +158,12 @@ async function startWhatsAppBot() {
       } catch (sentinelErr) {
         console.warn("[SENTINEL INIT WARN]", sentinelErr.message);
       }
+      try {
+        const { startScalingSentinel } = await import("./scaling_sentinel.mjs");
+        startScalingSentinel(safeSendMessage);
+      } catch (scaleErr) {
+        console.warn("[SCALING SENTINEL INIT WARN]", scaleErr.message);
+      }
     }
   });
 

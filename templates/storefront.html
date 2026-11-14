@@ -207,6 +207,9 @@
       <button class="tab-btn" onclick="switchBrand('thehobby')">
         <span>🧶</span> The Hobby Hive By TM
       </button>
+      <button class="tab-btn" onclick="switchBrand('keby254')">
+        <span>🇰🇪</span> KEby254 (Order Guard Live)
+      </button>
     </div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
@@ -266,6 +269,31 @@
           <button id="btn-submit-order" onclick="submitOrderToPerpetual()" style="background:var(--accent-green);color:#0d1117;border:none;padding:0.75rem 1.75rem;font-weight:700;border-radius:var(--radius-sm);cursor:pointer;font-size:1rem;box-shadow:0 4px 14px rgba(16,185,129,0.3);">
             🚀 Complete Order & Route to WhatsApp
           </button>
+        </div>
+      </div>
+
+      <!-- Order Guard: See -> Act -> Remedy & Continue Banner -->
+      <div id="order-guard-remedy-banner" style="display:none;margin-top:1rem;padding:1rem;background:rgba(244,63,94,0.12);border:1px solid #f43f5e;border-radius:var(--radius-sm);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+          <div>
+            <div id="og-remedy-title" style="color:#fda4af;font-weight:700;font-size:0.95rem;">⚠️ Checkout Blocked by Order Guard</div>
+            <div id="og-remedy-msg" style="color:var(--text-main);font-size:0.85rem;margin-top:0.25rem;"></div>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <button id="og-remedy-btn" type="button" onclick="applyOrderGuardRemedy()" style="display:none;background:#10b981;color:#0d1117;border:none;padding:0.55rem 1rem;font-weight:700;border-radius:var(--radius-sm);cursor:pointer;font-size:0.85rem;"></button>
+            <button type="button" onclick="document.getElementById('order-guard-remedy-banner').style.display='none'" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:0.5rem 0.75rem;border-radius:var(--radius-sm);cursor:pointer;font-size:0.8rem;">Dismiss</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Order Guard: Stock Locked & M-Pesa Till Unlocked Banner -->
+      <div id="order-guard-till-banner" style="display:none;margin-top:1rem;padding:1rem;background:rgba(16,185,129,0.12);border:1px solid var(--accent-green);border-radius:var(--radius-sm);">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
+          <div>
+            <div style="color:var(--accent-green);font-weight:700;font-size:0.95rem;">🔒 Stock Reserved — Pay via M-Pesa Till</div>
+            <div id="og-till-details" style="color:var(--text-main);font-size:0.85rem;margin-top:0.25rem;"></div>
+          </div>
+          <button type="button" onclick="releaseCurrentHold()" style="background:transparent;color:#fda4af;border:1px solid #f43f5e;padding:0.45rem 0.85rem;border-radius:var(--radius-sm);cursor:pointer;font-size:0.8rem;">Cancel & Release Stock</button>
         </div>
       </div>
 
@@ -352,17 +380,33 @@
           { id: "hh-002", name: "Botanical Embroidery Hoop Trio Kit", price: 1650.00, emoji: "🪡", desc: "Pre-printed linen fabric, bamboo hoops, DMC floss palette, and step-by-step stitch booklet." },
           { id: "hh-003", name: "Soy Candle Pouring & Fragrance Lab Box", price: 3200.00, emoji: "🕯️", desc: "Natural soy wax flakes, amber glass jars, wooden crackle wicks, and coastalessential oils." },
           { id: "hh-004", name: "Watercolor Floral Postcard Set (24-Pan)", price: 2100.00, emoji: "🖌️", desc: "Artist-grade half-pan watercolors with cold-press 300gsm cotton postcard pad and brush pen." }
+      },
+      keby254: {
+        title: "🇰🇪 KEby254 — Beauty, Hair & Craft Essentials (Order Guard Live)",
+        currency: "KES",
+        items: [
+          { id: "keby254-hair-clips", name: "Hair Clips", price: 150, emoji: "📎", desc: "Strong-grip styling hair clips (6 pcs). Max 10/order." },
+          { id: "keby254-hairband-pack", name: "Hairband Pack", price: 200, emoji: "🎀", desc: "Soft stretch no-snag hairband pack (10 bands). Max 8/order." },
+          { id: "keby254-shower-cap", name: "Shower Cap", price: 250, emoji: "🚿", desc: "Waterproof double-lined elastic shower cap. Max 5/order." },
+          { id: "keby254-eye-pencil", name: "Eye Pencil (Thick / Thin)", price: 180, emoji: "✏️", desc: "Smudge-proof eye pencil in Thick & Thin across 6 colors. Surebet mode." },
+          { id: "keby254-satin-bonnet", name: "Satin Bonnet (Double-Sided)", price: 550, emoji: "👑", desc: "Reversible double-sided satin bonnet (2nd side defaults to Black). Max 5/order." },
+          { id: "keby254-spray-bottle", name: "Spray Bottle (300ml)", price: 300, emoji: "💦", desc: "Continuous fine-mist spray bottle. Max 5/order." },
+          { id: "keby254-beauty-blender", name: "Beauty Blender", price: 200, emoji: "🥚", desc: "Latex-free soft teardrop blending sponge. Surebet mode." },
+          { id: "keby254-crochet-hook", name: "Crochet Hook (Sized + Colored)", price: 220, emoji: "🪝", desc: "2.5mm–6.0mm color-coded ergonomic crochet hooks. Max 10/order." },
+          { id: "keby254-safety-pins", name: "Safety Pins (24 pcs)", price: 100, emoji: "📌", desc: "Rust-resistant assorted safety pins. Max 15/order, Surebet mode." }
         ]
       }
     };
 
-    const BRAND_ORDER = ["galore", "haberdashery", "kitchen", "brunchbox", "thehobby"];
+    const ORDER_GUARD_GATEWAY = "http://127.0.0.1:5174";
+    const BRAND_ORDER = ["galore", "haberdashery", "kitchen", "brunchbox", "thehobby", "keby254"];
     const BRAND_SLUG_MAP = {
       galore: "creative-galore",
       haberdashery: "haberdashery",
       kitchen: "leahs-kitchen",
       brunchbox: "brunchbox",
-      thehobby: "thehobby"
+      thehobby: "thehobby",
+      keby254: "keby254"
     };
 
     let activeBrand = "galore";
@@ -459,12 +503,91 @@
         return;
       }
 
-      listEl.innerHTML = cart.map(c => `
+      listEl.innerHTML = cart.map((c, idx) => `
         <div class="cart-item">
-          <span>${c.emoji} <b>${c.name}</b> (x${c.qty})</span>
-          <span style="font-family:var(--font-mono);font-weight:600;">${cur}${(c.qty * c.price).toFixed(2)}</span>
+          <span>${c.emoji || "🛍️"} <b>${c.name}</b></span>
+          <span style="display:flex;align-items:center;gap:0.5rem;">
+            <button type="button" onclick="adjustCartQty(${idx}, -1)" style="background:var(--surface-raised);color:var(--text-main);border:1px solid var(--border);width:24px;height:24px;border-radius:4px;cursor:pointer;">-</button>
+            <b style="font-family:var(--font-mono);min-width:24px;text-align:center;">${c.qty}</b>
+            <button type="button" onclick="adjustCartQty(${idx}, 1)" style="background:var(--surface-raised);color:var(--text-main);border:1px solid var(--border);width:24px;height:24px;border-radius:4px;cursor:pointer;">+</button>
+            <span style="font-family:var(--font-mono);font-weight:600;margin-left:0.5rem;">${cur}${(c.qty * c.price).toFixed(2)}</span>
+          </span>
         </div>
       `).join("");
+    }
+
+    function adjustCartQty(idx, delta) {
+      if (!cart[idx]) return;
+      cart[idx].qty += delta;
+      if (cart[idx].qty <= 0) cart.splice(idx, 1);
+      updateCartUI();
+    }
+
+    let pendingRemedy = null;
+    let activeHoldOrderId = null;
+
+    function showOrderGuardRemedy(verdict) {
+      const banner = document.getElementById("order-guard-remedy-banner");
+      const titleEl = document.getElementById("og-remedy-title");
+      const msgEl = document.getElementById("og-remedy-msg");
+      const btn = document.getElementById("og-remedy-btn");
+      document.getElementById("order-guard-till-banner").style.display = "none";
+
+      banner.style.display = "block";
+      titleEl.textContent = verdict.decision === "NEEDS_APPROVAL"
+        ? "🛡️ Awaiting Manager Approval (Till Hidden)"
+        : `⚠️ Order Guard: ${verdict.code || "CHECKOUT_REJECTED"}`;
+      msgEl.textContent = verdict.error || "Please adjust your cart and retry.";
+
+      pendingRemedy = null;
+      btn.style.display = "none";
+
+      if (verdict.code === "MAX_PER_ORDER_EXCEEDED" && verdict.item && verdict.max_per_order) {
+        pendingRemedy = { action: "set_qty", itemId: verdict.item, qty: verdict.max_per_order };
+        btn.textContent = `Set to ${verdict.max_per_order} & Retry`;
+        btn.style.display = "inline-block";
+      } else if (verdict.code === "INSUFFICIENT_STOCK" && verdict.item && verdict.available > 0) {
+        pendingRemedy = { action: "set_qty", itemId: verdict.item, qty: verdict.available };
+        btn.textContent = `Adjust to ${verdict.available} left & Retry`;
+        btn.style.display = "inline-block";
+      } else if (verdict.code === "SOLD_OUT" && verdict.item) {
+        pendingRemedy = { action: "remove", itemId: verdict.item };
+        btn.textContent = `Remove unavailable item & Retry`;
+        btn.style.display = "inline-block";
+      } else if (verdict.code === "BELOW_MIN_QTY" && verdict.item && verdict.min_qty) {
+        pendingRemedy = { action: "set_qty", itemId: verdict.item, qty: verdict.min_qty };
+        btn.textContent = `Set to min (${verdict.min_qty}) & Retry`;
+        btn.style.display = "inline-block";
+      }
+    }
+
+    async function applyOrderGuardRemedy() {
+      if (!pendingRemedy) return;
+      if (pendingRemedy.action === "set_qty") {
+        const target = cart.find(c => c.id === pendingRemedy.itemId);
+        if (target) target.qty = pendingRemedy.qty;
+      } else if (pendingRemedy.action === "remove") {
+        cart = cart.filter(c => c.id !== pendingRemedy.itemId);
+      }
+      pendingRemedy = null;
+      document.getElementById("order-guard-remedy-banner").style.display = "none";
+      updateCartUI();
+      if (cart.length > 0) {
+        await submitOrderToPerpetual();
+      }
+    }
+
+    async function releaseCurrentHold() {
+      if (!activeHoldOrderId) return;
+      try {
+        await fetch(`${ORDER_GUARD_GATEWAY}/api/v1/storefront/release-hold`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order_id: activeHoldOrderId, reason: "CUSTOMER_CANCELLED" })
+        });
+      } catch (_) {}
+      activeHoldOrderId = null;
+      document.getElementById("order-guard-till-banner").style.display = "none";
     }
 
     async function submitOrderToPerpetual() {
@@ -478,21 +601,66 @@
       const pickupPoint = document.getElementById("pickup-point").value;
       const total = cart.reduce((acc, c) => acc + (c.qty * c.price), 0);
       const data = CATALOGS[activeBrand];
+      const shopSlug = BRAND_SLUG_MAP[activeBrand] || "leahs-kitchen";
+      const clientOrderId = `ORD-${Date.now().toString(36).toUpperCase()}`;
 
-      const payload = {
-        shop_slug: BRAND_SLUG_MAP[activeBrand] || "leahs-kitchen",
-        customer_name: custName,
-        customer_phone: custPhone,
-        items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.price })),
-        total_amount: total,
-        currency: data.currency,
-        notes: `[${data.title}] Pickup: ${pickupPoint} | Cutoff: Compliant (< 17:00 window)`
-      };
+      const btn = document.getElementById("btn-submit-order");
+      btn.disabled = true;
+      btn.textContent = "🛡️ Inspecting Stock & Rules...";
+      document.getElementById("order-guard-remedy-banner").style.display = "none";
 
       try {
-        const btn = document.getElementById("btn-submit-order");
-        btn.disabled = true;
+        // Step 1: Blind Checkout Inspection & Atomic Stock Hold via Order Guard
+        let ogVerdict = null;
+        try {
+          const ogResp = await fetch(`${ORDER_GUARD_GATEWAY}/api/v1/storefront/checkout`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              order_id: clientOrderId,
+              shop_slug: shopSlug,
+              customer_name: custName,
+              customer_phone: custPhone,
+              delivery_address: pickupPoint,
+              items: cart.map(c => ({ id: c.id, name: c.name, qty: c.qty, unit_price: c.price }))
+            })
+          });
+          ogVerdict = await ogResp.json();
+          if (!ogResp.ok || !ogVerdict.can_show_payment) {
+            btn.disabled = false;
+            btn.textContent = "🚀 Complete Order & Route to WhatsApp";
+            showOrderGuardRemedy(ogVerdict);
+            return;
+          }
+        } catch (ogNetErr) {
+          console.warn("Order Guard gateway unreachable, falling back to room webhook:", ogNetErr);
+        }
+
+        if (ogVerdict && ogVerdict.can_show_payment) {
+          activeHoldOrderId = ogVerdict.order_id;
+          const mins = Math.max(1, Math.round((ogVerdict.expires_at - Date.now()) / 60000));
+          const trimText = (ogVerdict.trim_notices || []).length > 0
+            ? ` | Surebet adjusted: ${ogVerdict.trim_notices.map(t => `${t.name} ${t.requested_qty}→${t.assigned_qty}`).join(", ")}`
+            : "";
+          document.getElementById("order-guard-till-banner").style.display = "block";
+          document.getElementById("og-till-details").innerHTML =
+            `Order <code>${ogVerdict.order_id}</code> &bull; Till: <b>${ogVerdict.mpesa_till_number || "5758419"}</b> &bull; Total: <b>KES ${Number(ogVerdict.total_value || total).toLocaleString()}</b> &bull; Hold expires in ~${mins} min${trimText}`;
+        }
+
+        // Step 2: Dispatch cleared order to Perpetual Room Server
         btn.textContent = "Transmitting to WhatsApp...";
+        const finalItems = ogVerdict?.items || cart.map(c => ({ name: c.name, qty: c.qty, price: c.price }));
+        const finalTotal = ogVerdict?.total_value ?? total;
+        const payload = {
+          order_id: ogVerdict?.order_id || clientOrderId,
+          shop_slug: shopSlug,
+          customer_name: custName,
+          customer_phone: custPhone,
+          items: finalItems,
+          total_amount: finalTotal,
+          currency: data.currency,
+          notes: `[${data.title}] Pickup: ${pickupPoint} | Order Guard Verified`
+        };
 
         const resp = await fetch("/api/orders/webhook", {
           method: "POST",
@@ -510,13 +678,13 @@
           document.getElementById("active-order-id").textContent = ord.order_id;
           cart = [];
           updateCartUI();
-
-          // Poll order station to show live floor advancement
           pollOrderStatus(ord.order_id);
         } else {
           alert("Order submission error: " + (resData.error || "Unknown"));
         }
       } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "🚀 Complete Order & Route to WhatsApp";
         alert("Network error transmitting order: " + err.message);
       }
     }
