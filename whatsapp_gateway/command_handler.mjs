@@ -29,7 +29,7 @@ import {
 
 export const KNOWN_COMMANDS = [
   "help", "status", "health", "orders", "order", "details",
-  "paid", "pack", "verify", "dispatch", "delivered", "confirm",
+  "paid", "clear", "pair", "pack", "verify", "dispatch", "delivered", "confirm",
   "summary", "sales", "pulse", "eod", "reconcile", "closure",
   "product", "item", "items", "catalog",
   "approve", "hide", "drafts", "policy",
@@ -448,11 +448,11 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
     }
   }
 
-  // 5. Payment Verification: !paid <id> <ref>
-  if (command === "!paid") {
+  // 5. Payment Verification: !paid <id> <ref> (Aliases: !clear, !pair)
+  if (command === "!paid" || command === "!clear" || command === "!pair") {
     const match = args.match(/^(\S+)\s+(\S+)$/i);
     if (!match) {
-      await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!paid <order_id> <mpesa_code>\`\nExample: \`!paid 832f1b75 SHK89271KJ\`` });
+      await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`${command} <order_id> <mpesa_code>\`\nExample: \`${command} 4e46c587 UKC...XYZ\`` });
       return;
     }
     const orderId = match[1];
@@ -1779,8 +1779,8 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
     }
   }
 
-  // 6. Allow Platform Floor Ops / Admin Oversight to execute !paid, !pack, !verify, !dispatch, !delivered, !confirm and mirror to the Shop's groups
-  if (command === "!paid" || command === "!pack" || command === "!verify" || command === "!dispatch" || command === "!delivered" || command === "!confirm") {
+  // 6. Allow Platform Floor Ops / Admin Oversight to execute !paid, !clear, !pair, !pack, !verify, !dispatch, !delivered, !confirm and mirror to the Shop's groups
+  if (command === "!paid" || command === "!clear" || command === "!pair" || command === "!pack" || command === "!verify" || command === "!dispatch" || command === "!delivered" || command === "!confirm") {
     const firstToken = args.trim().split(/\s+/)[0];
     if (!firstToken) {
       await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`${command} <order_id>\`` });
