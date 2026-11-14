@@ -20,7 +20,7 @@ services:
     networks:
       - perpetual-net
 
-  # 2. Autonomous WhatsApp Workforce Gateway (Baileys + Supabase Multi-Tenant Routing)
+  # 2. Autonomous WhatsApp & Order Guard Microservice (Baileys + Blind Checkout Inspector + Supabase)
   whatsapp-gateway:
     build:
       context: .
@@ -30,9 +30,12 @@ services:
       - "5174:5174"
     volumes:
       - ./whatsapp_gateway/.auth_whatsapp_baileys:/app/.auth_whatsapp_baileys
+      - ./config:/app/config
+      - ./order_guard_state.json:/app/order_guard_state.json
     env_file:
       - ./whatsapp_gateway/.env
     environment:
+      - NODE_ENV=production
       - WHATSAPP_PORT=5174
       - WHATSAPP_AUTH_DIR=/app/.auth_whatsapp_baileys
       - ROOM_SERVER_URL=http://room-server:5050
