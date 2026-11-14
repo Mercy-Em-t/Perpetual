@@ -697,3 +697,140 @@ test("26. KEby254 Live Shop: Satin Bonnet cap, Eye Pencil surebet, Crochet Hook 
   const settled = await guard.commitOrder("KE254-TEST-2");
   assert.equal(settled.success, true);
 });
+
+test("27. Exact fulfillment boundary: x=4 available rejects 4+k (k=1,2,3,6) with 0 locked, then retry with 4 succeeds", async () => {
+  const guard = createTestGuard();
+  await guard.configureItemPolicy("shop-1", "serum", {
+    name: "Hair Serum",
+    daily_cap: 4,
+    max_per_order: 20,
+    partial_fill_mode: "strict",
+    unit_price: 450
+  });
+
+  for (const k of [1, 2, 3, 6]) {
+    const res = await guard.inspectAndReserve(sealCheckoutEnvelope({
+      order_id: `ORD-BOUND-${k}`,
+      shop_id: "shop-1",
+      customer_phone: "0712000401",
+      items: [{ id: "serum", name: "Hair Serum", qty: 4 + k, unit_price: 450 }]
+    }, { piiKey: PII_KEY, inspectorKey: INSPECTOR_KEY, hmacSecret: HMAC_SECRET }));
+
+    assert.equal(res.decision, "REJECTED");
+    assert.equal(res.code, "INSUFFICIENT_STOCK");
+    assert.equal(res.can_show_payment, false);
+    assert.equal(res.available, 4);
+    assert.equal(res.requested_qty, 4 + k);
+  }
+
+  // Confirm 0 locked after rejections
+  const summary = await guard.getDailyStockSummary("shop-1");
+  const item = summary.items.find(i => i.item_id === "serum");
+  assert.equal(item.held, 0);
+  assert.equal(item.available, 4);
+
+  // Immediate retry with exact available quantity 4 -> APPROVED
+  const approved = await guard.inspectAndReserve(sealCheckoutEnvelope({
+    order_id: "ORD-BOUND-EXACT",
+    shop_id: "shop-1",
+    customer_phone: "0712000401",
+    items: [{ id: "serum", name: "Hair Serum", qty: 4, unit_price: 450 }]
+  }, { piiKey: PII_KEY, inspectorKey: INSPECTOR_KEY, hmacSecret: HMAC_SECRET }));
+
+  assert.equal(approved.decision, "APPROVED");
+  assert.equal(approved.can_show_payment, true);
+  assert.equal(approved.items[0].qty, 4);
+});
+
+test("28. Anti-hoarding: ordinary order amounts enforced (max_per_order=3, max_per_customer_per_day=5)", async () => {
+  const guard = createTestGuard();
+  await guard.configureItemPolicy("shop-1", "clips", {
+    name: "Hair Clips",
+    daily_cap: 40,
+    max_per_order: 3,
+    max_per_customer_per_day: 5,
+    unit_price: 150
+  });
+
+  // Single customer trying to hoard all 40 -> MAX_PER_ORDER_EXCEEDED
+  const hoardRes = await guard.inspectAndReserve(sealCheckoutEnvelope({
+    order_id: "ORD-HOARD-ALL",
+    shop_id: "shop-1",
+    customer_phone: "0712000501",
+    items: [{ id: "clips", name: "Hair Clips", qty: 40, unit_price: 150 }]
+  }, { piiKey: PII_KEY, inspectorKey: INSPECTOR_KEY, hmacSecret: HMAC_SECRET }));
+  assert.equal(hoardRes.decision, "REJECTED");
+  assert.equal(hoardRes.code, "MAX_PER_ORDER_EXCEEDED");
+  assert.equal(hoardRes.can_show_payment, false);
+
+  // Order 1: 3 units -> APPROVED
+  const o1 = await guard.inspectAndReserve(sealCheckoutEnvelope({
+    order_id: "ORD-HOARD-1",
+    shop_id: "shop-1",
+    customer_phone: "0712000501",
+    items: [{ id: "clips", name: "Hair Clips", qty: 3, unit_price: 150 }]
+  }, { piiKey: PII_KEY, inspectorKey: INSPECTOR_KEY, hmacSecret: HMAC_SECRET }));
+  assert.equal(o1.decision, "APPROVED");
+  await guard.commitOrder("ORD-HOARD-1");
+
+  // Order 2: 2 units -> APPROVED (total 5)
+  const o2 = await guard.inspectAndReserve(sealCheckoutEnvelope({
+    order_id: "ORD-HOARD-2",
+    shop_id: "shop-1",
+    customer_phone: "0712000501",
+    items: [{ id: "clips", name: "Hair Clips", qty: 2, unit_price: 150 }]
+  }, { piiKey: PII_KEY, inspectorKey: INSPECTOR_KEY, hmacSecret: HMAC_SECRET }));
+  assert.equal(o2.decision, "APPROVED");
+  await guard.commitOrder("ORD-HOARD-2");
+
+  // Order 3: 1 unit -> DAILY_CUSTOMER_LIMIT_EXCEEDED
+  const o3 = await guard.inspectAndReserve(sealCheckoutEnvelope({
+    order_id: "ORD-HOARD-3",
+    shop_id: "shop-1",
+    customer_phone: "0712000501",
+    items: [{ id: "clips", name: "Hair Clips", qty: 1, unit_price: 150 }]
+  }, { piiKey: PII_KEY, inspectorKey: INSPECTOR_KEY, hmacSecret: HMAC_SECRET }));
+  assert.equal(o3.decision, "REJECTED");
+  assert.equal(o3.code, "DAILY_CUSTOMER_LIMIT_EXCEEDED");
+  assert.equal(o3.can_show_payment, false);
+
+  // 35 items remain for ordinary shoppers
+  const summary = await guard.getDailyStockSummary("shop-1");
+  const item = summary.items.find(i => i.item_id === "clips");
+  assert.equal(item.available, 35);
+});
+
+test("29. Fast hold recovery: abandoned cart of full daily_cap=5 expires after 13m+1s TTL+grace", async () => {
+  const nowRef = { ms: Date.UTC(2026, 10, 14, 7, 0, 0) };
+  const guard = createTestGuard(nowRef);
+  await guard.configureItemPolicy("shop-1", "bonnet", {
+    name: "Satin Bonnet",
+    daily_cap: 5,
+    max_per_order: 5,
+    unit_price: 550
+  });
+
+  // Buyer 1 reserves all 5 and abandons cart
+  const hold1 = await guard.inspectAndReserve(sealCheckoutEnvelope({
+    order_id: "ORD-ABANDON-1",
+    shop_id: "shop-1",
+    customer_phone: "0712000601",
+    items: [{ id: "bonnet", name: "Satin Bonnet", qty: 5, unit_price: 550 }]
+  }, { piiKey: PII_KEY, inspectorKey: INSPECTOR_KEY, hmacSecret: HMAC_SECRET }));
+  assert.equal(hold1.decision, "APPROVED");
+
+  // Advance clock by 13 minutes + 1 second (10m holdTtlMs + 3m graceTtlMs + 1s)
+  nowRef.ms += (13 * 60 + 1) * 1000;
+  guard.sweepExpiredHolds();
+
+  // Next customer can immediately buy all 5 without waiting 24h
+  const hold2 = await guard.inspectAndReserve(sealCheckoutEnvelope({
+    order_id: "ORD-RECOVER-2",
+    shop_id: "shop-1",
+    customer_phone: "0712000602",
+    items: [{ id: "bonnet", name: "Satin Bonnet", qty: 5, unit_price: 550 }]
+  }, { piiKey: PII_KEY, inspectorKey: INSPECTOR_KEY, hmacSecret: HMAC_SECRET }));
+  assert.equal(hold2.decision, "APPROVED");
+  assert.equal(hold2.can_show_payment, true);
+  assert.equal(hold2.items[0].qty, 5);
+});

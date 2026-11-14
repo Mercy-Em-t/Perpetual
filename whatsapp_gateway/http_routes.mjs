@@ -2384,7 +2384,9 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
           try {
             const fsMod = await import("fs");
             const pathMod = await import("path");
-            const localCfgPath = pathMod.resolve(process.cwd(), "config", "shops", `${shop_slug}.json`);
+            const moduleRelativeCfgPath = pathMod.resolve(import.meta.dirname, "..", "config", "shops", `${shop_slug}.json`);
+            const cwdRelativeCfgPath = pathMod.resolve(process.cwd(), "config", "shops", `${shop_slug}.json`);
+            const localCfgPath = fsMod.existsSync(moduleRelativeCfgPath) ? moduleRelativeCfgPath : cwdRelativeCfgPath;
             if (fsMod.existsSync(localCfgPath)) {
               const cfg = JSON.parse(fsMod.readFileSync(localCfgPath, "utf-8"));
               resolvedShop = { id: cfg.shop_id, slug: cfg.shop_slug, name: cfg.name, mpesa_till_number: cfg.mpesa_till_number };
