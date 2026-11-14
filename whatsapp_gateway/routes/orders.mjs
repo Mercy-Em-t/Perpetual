@@ -5,6 +5,7 @@
 import { parseJsonBody } from "../http_helpers.mjs";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "../config.mjs";
 import { getAllShops } from "../tenant_resolver.mjs";
+import { sealCheckoutEnvelope } from "../blind_checkout_crypto.mjs";
 
 export async function handleOrdersRoutes({
   req,
@@ -13,6 +14,9 @@ export async function handleOrdersRoutes({
   GROUPS,
   safeSendMessage,
   sharedOrderGuard,
+  PII_ENCRYPTION_KEY,
+  ORDER_GUARD_KEY,
+  ORDER_GUARD_HMAC_SECRET,
 }) {
     if (req.method === "POST" && (parsedUrl.pathname === "/order" || parsedUrl.pathname === "/api/order" || parsedUrl.pathname === "/api/checkout")) {
       try {
