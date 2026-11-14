@@ -16,6 +16,7 @@ export async function handleOpsGroupsAndSupportRoutes({
   getBotJid,
   safeSendMessage,
   getSock,
+  sharedOrderGuard,
 }) {
     if (req.method === "GET" && parsedUrl.pathname === "/api/all-participating") {
       try {
@@ -483,6 +484,42 @@ export async function handleOpsGroupsAndSupportRoutes({
         res.writeHead(500);
         return res.end(JSON.stringify({ error: err.message }));
       }
+    }
+
+    // GET /api/bridge/executive-feed (Unified Ops <-> Perpetual DIKW Bridge Feed)
+    if (req.method === "GET" && parsedUrl.pathname === "/api/bridge/executive-feed") {
+      const allTickets = listSupportTickets({ status: "ALL" });
+      const activeTickets = allTickets.filter((t) => t.status !== "RESOLVED" && t.status !== "CLOSED");
+      const resolvedTickets = allTickets.filter((t) => t.status === "RESOLVED" || t.status === "CLOSED");
+      const sentinel = getLastScalingReport();
+      const guardState = sharedOrderGuard?.state || {};
+
+      res.writeHead(200);
+      return res.end(JSON.stringify({
+        bridge: {
+          status: "UP",
+          service: "perpetual-whatsapp-gateway",
+          timestamp: new Date().toISOString(),
+          uptimeSec: Math.round(process.uptime()),
+          whatsappConnection: getConnectionState(),
+          botJid: getBotJid(),
+          groupsCount: Object.keys(GROUPS || {}).length,
+        },
+        sentinel,
+        tickets: {
+          total: allTickets.length,
+          activeCount: activeTickets.length,
+          resolvedCount: resolvedTickets.length,
+          active: activeTickets.slice(0, 20),
+          recentResolved: resolvedTickets.slice(0, 10),
+        },
+        orderGuard: {
+          policiesCount: Object.keys(guardState.policies || {}).length,
+          activeHoldsCount: Object.values(guardState.holds || {}).filter((h) => h.status === "HELD").length,
+          dailyPoolsCount: Object.keys(guardState.daily_pools || {}).length,
+        },
+        groups: GROUPS,
+      }));
     }
 
     // GET /api/sentinel/scaling-status
