@@ -6,6 +6,9 @@ import { parseJsonBody } from "../http_helpers.mjs";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "../config.mjs";
 import { createSupportTicket, resolveSupportTicket, listSupportTickets, formatTicketCard } from "../support_tickets.mjs";
 import { runScalingCheck, getLastScalingReport } from "../scaling_sentinel.mjs";
+import { runOrderLifecycleProbe } from "../order_lifecycle_probe.mjs";
+
+let lastLifecycleProbeReport = null;
 
 export async function handleOpsGroupsAndSupportRoutes({
   req,
@@ -520,6 +523,125 @@ export async function handleOpsGroupsAndSupportRoutes({
         },
         groups: GROUPS,
       }));
+    }
+
+    // GET /api/order-guard/live-telemetry (Real-time Order Guard holds/pools/TTLs + latest 7x1000 probe)
+    if (req.method === "GET" && parsedUrl.pathname === "/api/order-guard/live-telemetry") {
+      try {
+        if (sharedOrderGuard) {
+          await sharedOrderGuard.sweepExpiredHolds();
+        }
+        const nowMs = Date.now();
+        const guardState = sharedOrderGuard?.state || {};
+        if (!lastLifecycleProbeReport) {
+          lastLifecycleProbeReport = await runOrderLifecycleProbe({ sampleId: "ALL", requestsPerSample: 1000 });
+        }
+
+        const allHolds = Object.values(guardState.holds || {});
+        const statusCounts = {
+          HELD: 0,
+          NEEDS_APPROVAL: 0,
+          COMMITTED: 0,
+          EXPIRED: 0,
+          RELEASED: 0,
+          CANCELLED: 0,
+          REFUND_REQUIRED: 0,
+        };
+        for (const h of allHolds) {
+          const st = String(h.status || "").toUpperCase();
+          statusCounts[st] = (statusCounts[st] || 0) + 1;
+        }
+
+        const holdsList = allHolds
+          .slice()
+          .sort((a, b) => Number(b.updated_at || b.created_at || 0) - Number(a.updated_at || a.created_at || 0))
+          .slice(0, 50)
+          .map((h) => ({
+            order_id: h.order_id,
+            shop_id: h.shop_id,
+            sale_date: h.sale_date,
+            status: h.status,
+            total_value: h.total_value,
+            items: h.items,
+            created_at: h.created_at,
+            updated_at: h.updated_at,
+            expires_at: h.expires_at,
+            grace_until: h.grace_until,
+            remaining_hold_ms: Math.max(0, Number(h.expires_at || 0) - nowMs),
+            remaining_grace_ms: Math.max(0, Number(h.grace_until || h.expires_at || 0) - nowMs),
+            customer_hash_prefix: String(h.customer_hash || "").slice(0, 8),
+          }));
+
+        const poolsList = Object.values(guardState.daily_pools || {}).map((p) => {
+          const cap = p.daily_cap === null || p.daily_cap === undefined ? null : Number(p.daily_cap);
+          const held = Number(p.held || 0);
+          const sold = Number(p.sold || 0);
+          return {
+            ...p,
+            available: cap === null ? null : Math.max(0, cap - held - sold),
+          };
+        });
+        const policiesList = Object.values(guardState.policies || {});
+
+        res.writeHead(200);
+        return res.end(JSON.stringify({
+          ok: true,
+          timestamp: new Date(nowMs).toISOString(),
+          bridge: {
+            whatsappConnection: getConnectionState(),
+            uptimeSec: Math.round(process.uptime()),
+          },
+          config: {
+            holdTtlMs: sharedOrderGuard?.defaultHoldTtlMs ?? 600000,
+            graceTtlMs: sharedOrderGuard?.defaultGraceTtlMs ?? 180000,
+            approvalHoldTtlMs: sharedOrderGuard?.approvalHoldTtlMs ?? 1800000,
+            maxOrderValue: sharedOrderGuard?.defaultMaxOrderValue ?? 20000,
+            tillLookbackMs: 600000,
+            radarMaxPollSec: 60,
+            menuCacheTtlHours: 1,
+            duplicateGuardWindowSec: 30,
+            backoff: {
+              maxRetries: 2,
+              baseDelayMs: 60,
+              maxDelayMs: 800,
+              retryableStatuses: [502, 503, 504],
+            },
+          },
+          summary: {
+            policiesCount: policiesList.length,
+            poolsCount: poolsList.length,
+            totalHoldsTracked: allHolds.length,
+            statusCounts,
+          },
+          pools: poolsList,
+          policies: policiesList,
+          activeHolds: holdsList,
+          lastProbeReport: lastLifecycleProbeReport,
+        }));
+      } catch (err) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+    }
+
+    // POST /api/order-guard/run-probe (On-demand 7x1000 resilience stress & chaos probe)
+    if (req.method === "POST" && parsedUrl.pathname === "/api/order-guard/run-probe") {
+      try {
+        const body = await parseJsonBody(req).catch(() => ({}));
+        const requestedSample = body?.sample || "ALL";
+        const report = await runOrderLifecycleProbe({
+          sampleId: requestedSample,
+          requestsPerSample: 1000,
+        });
+        if (!requestedSample || String(requestedSample).toUpperCase() === "ALL") {
+          lastLifecycleProbeReport = report;
+        }
+        res.writeHead(200);
+        return res.end(JSON.stringify({ ok: true, report }));
+      } catch (err) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
     }
 
     // GET /api/sentinel/scaling-status

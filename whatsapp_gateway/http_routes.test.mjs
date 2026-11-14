@@ -163,3 +163,33 @@ test("4. Support ticket hardening: rejects empty description (400) and supports 
     server.close();
   }
 });
+
+test("5. Order Guard live telemetry & 7x1000 probe endpoints return full sample matrix with zero oversells", async () => {
+  const { server, baseUrl } = await startTestServer();
+  try {
+    const telRes = await fetch(`${baseUrl}/api/order-guard/live-telemetry`);
+    assert.equal(telRes.status, 200);
+    const telJson = await telRes.json();
+    assert.equal(telJson.ok, true);
+    assert.equal(telJson.config.holdTtlMs, 600000);
+    assert.equal(telJson.config.graceTtlMs, 180000);
+    assert.equal(telJson.lastProbeReport.totalRequests, 7000);
+    assert.equal(telJson.lastProbeReport.samples.length, 7);
+    assert.equal(telJson.lastProbeReport.zeroOversells, true);
+
+    const probeRes = await fetch(`${baseUrl}/api/order-guard/run-probe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sample: "ALL" }),
+    });
+    assert.equal(probeRes.status, 200);
+    const probeJson = await probeRes.json();
+    assert.equal(probeJson.ok, true);
+    assert.equal(probeJson.report.totalRequests, 7000);
+    assert.equal(probeJson.report.samples.length, 7);
+    assert.equal(probeJson.report.zeroOversells, true);
+    assert.equal(probeJson.report.zeroLeakedHolds, true);
+  } finally {
+    server.close();
+  }
+});
