@@ -721,6 +721,35 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
         return;
       }
 
+      // !pool apply-defaults <cap> <max> -> apply default cap & max across all active shop products
+      if (parts[0].toLowerCase() === "apply-defaults") {
+        const cap = Number(parts[1] ?? 50);
+        const maxOrd = Number(parts[2] ?? 10);
+        if (!Number.isFinite(cap) || cap < 0 || !Number.isFinite(maxOrd) || maxOrd < 1) {
+          await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!pool apply-defaults <daily_cap> <max_per_order>\`\nExample: \`!pool apply-defaults 50 10\`` });
+          return;
+        }
+        try {
+          const products = await listShopProducts(shop.id, "", 100);
+          let count = 0;
+          for (const p of products || []) {
+            await sharedOrderGuard.configureItemPolicy(shop.id, p.id, {
+              name: p.name,
+              daily_cap: cap,
+              max_per_order: maxOrd,
+              unit_price: Number(p.price || 0)
+            });
+            count++;
+          }
+          await safeSendMessage(replyJid, {
+            text: `✅ *Order Guard Applied Across ${shop.name}:*\n• Products configured: *${count}*\n• Daily Cap: *${cap}/day* (resets midnight EAT)\n• Max/Order: *${maxOrd}*`
+          });
+        } catch (err) {
+          await safeSendMessage(replyJid, { text: `❌ Could not apply defaults: ${err.message}` });
+        }
+        return;
+      }
+
       // !pool <item> cap <N> | !pool <item> max <N> | !pool <item> mode <strict|surebet>
       if (parts.length >= 3) {
         const action = parts[parts.length - 2].toLowerCase();
