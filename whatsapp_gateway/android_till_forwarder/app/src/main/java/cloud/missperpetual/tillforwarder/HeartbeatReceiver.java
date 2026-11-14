@@ -22,9 +22,24 @@ public class HeartbeatReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        Log.i(TAG, "Heartbeat alarm triggered! Firing async pulse & flushing offline queue...");
-        SmsReceiver.sendHeartbeatAsync(context);
-        SmsReceiver.flushQueueAsync(context);
+        Log.i(TAG, "Heartbeat alarm triggered! Sweeping SMS inbox, firing pulse & flushing queue...");
+        final PendingResult pendingResult = goAsync();
+        new Thread(() -> {
+            try {
+                SmsReceiver.sweepRecentInbox(context);
+                SmsReceiver.sendHeartbeatAsync(context);
+                SmsReceiver.flushQueueAsync(context, () -> {
+                    try {
+                        pendingResult.finish();
+                    } catch (Exception ignored) {}
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "Heartbeat worker error: " + e.getMessage());
+                try {
+                    pendingResult.finish();
+                } catch (Exception ignored) {}
+            }
+        }).start();
         scheduleNext(context);
     }
 

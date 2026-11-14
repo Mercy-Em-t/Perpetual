@@ -71,7 +71,7 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("Dual-Channel Autonomous Bridge (Redmi Note 12 v2.6.0 • Sentinel Active)");
+        subtitle.setText("Dual-Channel Autonomous Bridge (Redmi Note 12 v2.8.0 • Sentinel Active)");
         subtitle.setTextColor(Color.parseColor("#94A3B8"));
         subtitle.setPadding(0, 8, 0, 24);
         root.addView(subtitle);
@@ -343,13 +343,15 @@ public class MainActivity extends Activity {
                 );
                 if (cursor != null) {
                     while (cursor.moveToNext()) {
+                        String id = cursor.getString(cursor.getColumnIndexOrThrow("_id"));
                         String address = cursor.getString(cursor.getColumnIndexOrThrow("address"));
                         String body = cursor.getString(cursor.getColumnIndexOrThrow("body"));
                         long date = cursor.getLong(cursor.getColumnIndexOrThrow("date"));
 
                         if (SmsReceiver.isFinancialMessage(address, body)) {
-                            SmsReceiver.enqueueMessage(this, address != null ? address : "MPESA", body, date);
-                            enqueued++;
+                            if (SmsReceiver.enqueueMessage(this, id, address != null ? address : "MPESA", body, date)) {
+                                enqueued++;
+                            }
                         }
                     }
                     cursor.close();

@@ -180,8 +180,46 @@ public class SmsReceiver extends BroadcastReceiver {
     }
 
     public static synchronized void enqueueMessage(Context context, String from, String text, long timestamp) {
+        enqueueMessage(context, null, from, text, timestamp);
+    }
+
+    public static synchronized boolean enqueueMessage(Context context, String smsId, String from, String text, long timestamp) {
         try {
+            if (text == null || text.trim().isEmpty()) return false;
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+
+            // Deduplicate by SMS ID (if from inbox cursor) or normalized text hash
+            String dedupKey = (smsId != null && !smsId.isEmpty())
+                    ? "id:" + smsId
+                    : "txt:" + text.trim().hashCode();
+            String seenRaw = prefs.getString("seen_sms_keys", "[]");
+            JSONArray seenArr = new JSONArray(seenRaw);
+            for (int i = 0; i < seenArr.length(); i++) {
+                if (dedupKey.equals(seenArr.optString(i))) {
+                    return false;
+                }
+            }
+            // Also check text hash when smsId is provided so SMS_RECEIVED + inbox sweep never double-send
+            String textKey = "txt:" + text.trim().hashCode();
+            for (int i = 0; i < seenArr.length(); i++) {
+                if (textKey.equals(seenArr.optString(i))) {
+                    return false;
+                }
+            }
+
+            seenArr.put(dedupKey);
+            if (!dedupKey.equals(textKey)) {
+                seenArr.put(textKey);
+            }
+            // Cap seen history to last 250 keys
+            if (seenArr.length() > 250) {
+                JSONArray trimmed = new JSONArray();
+                for (int i = seenArr.length() - 250; i < seenArr.length(); i++) {
+                    trimmed.put(seenArr.get(i));
+                }
+                seenArr = trimmed;
+            }
+
             String rawQueue = prefs.getString("offline_queue", "[]");
             JSONArray queue = new JSONArray(rawQueue);
             JSONObject item = new JSONObject();
@@ -192,10 +230,61 @@ public class SmsReceiver extends BroadcastReceiver {
             item.put("till_sent", false);
             item.put("finance_sent", false);
             queue.put(item);
-            prefs.edit().putString("offline_queue", queue.toString()).apply();
+            prefs.edit()
+                    .putString("offline_queue", queue.toString())
+                    .putString("seen_sms_keys", seenArr.toString())
+                    .apply();
+            return true;
         } catch (Exception e) {
             Log.e(TAG, "Queue error: " + e.getMessage());
+            return false;
         }
+    }
+
+    /**
+     * Sweeps recent SMS inbox messages (last 24h, up to 25 messages) to catch any
+     * M-Pesa / financial SMS whose real-time SMS_RECEIVED broadcast was dropped by MIUI/Doze.
+     */
+    public static int sweepRecentInbox(Context context) {
+        int enqueued = 0;
+        android.database.Cursor cursor = null;
+        try {
+            long cutoffMs = System.currentTimeMillis() - (24L * 60L * 60L * 1000L);
+            android.net.Uri uri = android.net.Uri.parse("content://sms/inbox");
+            cursor = context.getContentResolver().query(
+                    uri,
+                    new String[]{"_id", "address", "body", "date"},
+                    "date >= ?",
+                    new String[]{String.valueOf(cutoffMs)},
+                    "date DESC LIMIT 25"
+            );
+            if (cursor != null) {
+                while (cursor.moveToNext()) {
+                    String id = cursor.getString(cursor.getColumnIndexOrThrow("_id"));
+                    String address = cursor.getString(cursor.getColumnIndexOrThrow("address"));
+                    String body = cursor.getString(cursor.getColumnIndexOrThrow("body"));
+                    long date = cursor.getLong(cursor.getColumnIndexOrThrow("date"));
+
+                    if (isFinancialMessage(address, body)) {
+                        if (enqueueMessage(context, id, address != null ? address : "MPESA", body, date)) {
+                            enqueued++;
+                        }
+                    }
+                }
+            }
+            if (enqueued > 0) {
+                Log.i(TAG, "Inbox sweep recovered " + enqueued + " missed financial SMS!");
+            }
+        } catch (SecurityException se) {
+            Log.w(TAG, "Inbox sweep skipped (READ_SMS permission missing): " + se.getMessage());
+        } catch (Exception e) {
+            Log.w(TAG, "Inbox sweep error: " + e.getMessage());
+        } finally {
+            if (cursor != null) {
+                try { cursor.close(); } catch (Exception ignored) {}
+            }
+        }
+        return enqueued;
     }
 
     public static int getOfflineQueueCount(Context context) {
@@ -363,11 +452,11 @@ public class SmsReceiver extends BroadcastReceiver {
                 URL url = new URL(targetUrl.trim());
                 conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
-                conn.setConnectTimeout(6000);
-                conn.setReadTimeout(8000);
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(15000);
                 conn.setDoOutput(true);
                 conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-                conn.setRequestProperty("User-Agent", "Savannah-Till-Forwarder/2.7.0");
+                conn.setRequestProperty("User-Agent", "Savannah-Till-Forwarder/2.8.0");
                 conn.setRequestProperty("x-till-relay-secret", "savannah_relay_sec_7f9b2c81e3a4d650");
                 byte[] bytes = jsonPayload.getBytes(StandardCharsets.UTF_8);
                 try (OutputStream os = conn.getOutputStream()) {
@@ -433,7 +522,7 @@ public class SmsReceiver extends BroadcastReceiver {
                 payload.put("battery", battery);
                 payload.put("charging", isCharging);
                 payload.put("network", netType);
-                payload.put("version", "2.7.0");
+                payload.put("version", "2.8.0");
                 payload.put("device_id", "redmi_note_12");
 
                 String tillUrl = getTillEndpoint(context);
