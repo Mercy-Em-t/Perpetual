@@ -2,6 +2,8 @@
  * HTTP IPC Routes for WhatsApp Gateway
  * Handles targeted dispatches to the 3 Departmental Groups from room_server.
  */
+import fs from "node:fs";
+import path from "node:path";
 import { parseJsonBody } from "./http_helpers.mjs";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "./config.mjs";
 import { getAllShops } from "./tenant_resolver.mjs";
@@ -27,6 +29,66 @@ export const sharedOrderGuard = new OrderGuard({
 });
 sharedOrderGuard.startSweeper(60_000);
 
+function getWhitelabelDistDir() {
+  const candidates = [
+    process.env.TMS_WHITELABEL_DIST,
+    path.resolve(import.meta.dirname, "..", "..", "Quality assurance", "tms-whitelabel-core", "dist"),
+    path.resolve(import.meta.dirname, "..", "tms-whitelabel-core", "dist"),
+  ].filter(Boolean);
+  return candidates.find((dir) => fs.existsSync(path.join(dir, "index.html"))) || null;
+}
+
+const MIME_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+  ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
+};
+
+function tryServeWhitelabelSpa(req, res, pathname) {
+  if (req.method !== "GET" && req.method !== "HEAD") return false;
+  if (pathname.startsWith("/api/") || pathname === "/health" || pathname === "/groups") return false;
+
+  const distDir = getWhitelabelDistDir();
+  if (!distDir) return false;
+
+  const relPath = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
+  const resolved = path.resolve(distDir, relPath);
+  if (!resolved.startsWith(path.resolve(distDir))) return false;
+
+  let targetFile = null;
+  if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+    targetFile = resolved;
+  } else if (!path.extname(relPath)) {
+    const indexHtml = path.join(distDir, "index.html");
+    if (fs.existsSync(indexHtml)) targetFile = indexHtml;
+  }
+
+  if (!targetFile) return false;
+
+  const ext = path.extname(targetFile).toLowerCase();
+  res.setHeader("Content-Type", MIME_TYPES[ext] || "application/octet-stream");
+  res.setHeader("Cache-Control", ext === ".html" ? "no-cache" : "public, max-age=31536000, immutable");
+  res.writeHead(200);
+  if (req.method === "HEAD") {
+    res.end();
+  } else {
+    res.end(fs.readFileSync(targetFile));
+  }
+  return true;
+}
+
 export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSendMessage, getSock }) {
   return async function handleHttpRequest(req, res) {
     const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
@@ -40,8 +102,12 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
       return res.end();
     }
 
-    // GET / (Root Gateway Dashboard)
+    // GET / (Serve TMS Whitelabel SPA for browsers, or JSON service info for API probes)
     if (req.method === "GET" && (parsedUrl.pathname === "/" || parsedUrl.pathname === "")) {
+      const acceptsHtml = String(req.headers.accept || "").includes("text/html");
+      if (acceptsHtml && tryServeWhitelabelSpa(req, res, "/")) {
+        return;
+      }
       res.setHeader("Content-Type", "application/json");
       res.writeHead(200);
       return res.end(JSON.stringify({
@@ -729,10 +795,13 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
         const pickup = customer.address || customer.fulfillmentType || meta.deliveryAddress || meta.fulfillmentType || "In-Store Pickup";
 
         // Order Guard check on legacy /order & /api/checkout when items are provided
-        if (Array.isArray(items) && items.length > 0) {
+        // If order was already reserved by /api/v1/storefront/checkout (via guardOrderId or orderId), reuse that hold!
+        const candidateHoldId = body.guardOrderId || orderId;
+        const existingHold = sharedOrderGuard.getHold(candidateHoldId) || sharedOrderGuard.getHold(orderId);
+        if (Array.isArray(items) && items.length > 0 && (!existingHold || !["HELD", "APPROVED", "COMMITTED"].includes(existingHold.status))) {
           const shopSlugOrId = body.shop_id || body.shopId || body.tenantId || body.shopSlug || "default";
           const legacyEnv = sealCheckoutEnvelope({
-            order_id: orderId,
+            order_id: candidateHoldId,
             shop_id: shopSlugOrId,
             shop_slug: body.shopSlug || body.tenantId,
             customer_name: custName,
@@ -805,6 +874,9 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
                   })
                 });
               }
+              try {
+                await sharedOrderGuard.commitOrder(body.guardOrderId || orderId);
+              } catch (_) {}
               console.log(`[INSTANT POOL CLEARANCE] Order ${orderId} pre-settled on creation via receipt ${preMatchedReceipt.code}`);
             }
           }
@@ -1118,11 +1190,13 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
         }
 
         // CASE B: Code IS in the Hardware Till Pool -> Safe to mark PAID!
-        if (primaryId) {
-          // Order Guard Atomic Commit: held -> sold (try orderId first, fallback to primaryId)
-          let ogCommit = await sharedOrderGuard.commitOrder(orderId || primaryId);
-          if (!ogCommit.success && ogCommit.code === "HOLD_NOT_FOUND" && orderId && primaryId && orderId !== primaryId) {
-            ogCommit = await sharedOrderGuard.commitOrder(primaryId);
+        if (primaryId || body.guardOrderId) {
+          // Order Guard Atomic Commit: held -> sold (try guardOrderId first, then orderId, then primaryId)
+          const holdCandidates = [body.guardOrderId, orderId, primaryId].filter(Boolean);
+          let ogCommit = { success: false, code: "HOLD_NOT_FOUND" };
+          for (const hId of holdCandidates) {
+            ogCommit = await sharedOrderGuard.commitOrder(hId);
+            if (ogCommit.success || ogCommit.code !== "HOLD_NOT_FOUND") break;
           }
           if (!ogCommit.success && ogCommit.code === "REFUND_REQUIRED") {
             if (safeSendMessage) {
@@ -2314,7 +2388,9 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
         if (!shop) {
           const fsMod = await import("fs");
           const pathMod = await import("path");
-          const localCfgPath = pathMod.resolve(process.cwd(), "config", "shops", `${slug}.json`);
+          const rootCfgPath = pathMod.resolve(import.meta.dirname, "..", "config", "shops", `${slug}.json`);
+          const cwdCfgPath = pathMod.resolve(process.cwd(), "config", "shops", `${slug}.json`);
+          const localCfgPath = fsMod.existsSync(rootCfgPath) ? rootCfgPath : cwdCfgPath;
           if (fsMod.existsSync(localCfgPath)) {
             const cfg = JSON.parse(fsMod.readFileSync(localCfgPath, "utf-8"));
             shop = {
@@ -2688,6 +2764,11 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
         res.writeHead(500);
         return res.end(JSON.stringify({ error: err.message }));
       }
+    }
+
+    // Serve built TMS Whitelabel SPA & static assets when available
+    if (tryServeWhitelabelSpa(req, res, parsedUrl.pathname)) {
+      return;
     }
 
     // Fallback 404
