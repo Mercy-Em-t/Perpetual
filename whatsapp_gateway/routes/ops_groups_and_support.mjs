@@ -401,9 +401,10 @@ export async function handleOpsGroupsAndSupportRoutes({
     if (req.method === "POST" && parsedUrl.pathname === "/api/support/ticket") {
       try {
         const body = await parseJsonBody(req);
+        const descriptionText = body.description || body.message || body.summary;
         const ticket = createSupportTicket({
-          title: body.title || body.description?.slice(0, 80),
-          description: body.description || body.message,
+          title: body.title || descriptionText?.slice(0, 80),
+          description: descriptionText,
           source: body.source || "API",
           severity: body.severity || "MEDIUM",
           shopSlug: body.shopSlug || body.shop_slug || null,
@@ -411,7 +412,8 @@ export async function handleOpsGroupsAndSupportRoutes({
           reportedBy: body.reportedBy || body.reported_by || "Storefront / Ops"
         });
         const card = formatTicketCard(ticket);
-        if (GROUPS.itHelpdesk?.jid) {
+        const isSilentProbe = Boolean(body.silent || body.isProbe || body.category === "E2E_PROBE");
+        if (!isSilentProbe && GROUPS.itHelpdesk?.jid) {
           await safeSendMessage(GROUPS.itHelpdesk.jid, { text: card });
         }
         res.writeHead(201);
