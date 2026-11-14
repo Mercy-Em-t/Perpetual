@@ -132,3 +132,34 @@ test("3. Storefront sub-router returns 409 INSUFFICIENT_STOCK before checkout/pa
     server.close();
   }
 });
+
+test("4. Support ticket hardening: rejects empty description (400) and supports dryRun=true without mutating state", async () => {
+  const { server, baseUrl } = await startTestServer();
+  try {
+    const emptyRes = await fetch(`${baseUrl}/api/support/ticket`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Blank ticket", description: "   " }),
+    });
+    assert.equal(emptyRes.status, 400);
+    const emptyJson = await emptyRes.json();
+    assert.match(emptyJson.error, /non-empty ticket description/i);
+
+    const beforeList = await (await fetch(`${baseUrl}/api/support/tickets`)).json();
+
+    const dryRes = await fetch(`${baseUrl}/api/support/ticket?dryRun=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Probe", description: "Dry run check" }),
+    });
+    assert.equal(dryRes.status, 200);
+    const dryJson = await dryRes.json();
+    assert.equal(dryJson.dryRun, true);
+    assert.equal(dryJson.ticket.status, "DRY_RUN");
+
+    const afterList = await (await fetch(`${baseUrl}/api/support/tickets`)).json();
+    assert.equal(afterList.count, beforeList.count);
+  } finally {
+    server.close();
+  }
+});

@@ -401,9 +401,36 @@ export async function handleOpsGroupsAndSupportRoutes({
     if (req.method === "POST" && parsedUrl.pathname === "/api/support/ticket") {
       try {
         const body = await parseJsonBody(req);
-        const descriptionText = body.description || body.message || body.summary;
+        const descriptionText = String(body.description || body.message || body.summary || "").trim();
+        if (!descriptionText) {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: "A non-empty ticket description is required." }));
+        }
+
+        const remoteAddr = req.socket?.remoteAddress || "";
+        const isLocal = remoteAddr === "127.0.0.1" || remoteAddr === "::1" || remoteAddr === "::ffff:127.0.0.1";
+        const hasInternalKey = Boolean(
+          process.env.INTERNAL_API_KEY && req.headers["x-internal-key"] === process.env.INTERNAL_API_KEY
+        );
+        const isTrustedProbe = isLocal || hasInternalKey;
+        const isDryRun = (parsedUrl.searchParams.get("dryRun") === "true" || body.dryRun === true) && isTrustedProbe;
+
+        if (isDryRun) {
+          const simulatedTicket = {
+            id: "INC-DRYRUN",
+            title: String(body.title || descriptionText.slice(0, 80)),
+            description: descriptionText,
+            source: body.source || "API",
+            severity: body.severity || "MEDIUM",
+            status: "DRY_RUN",
+            dryRun: true,
+          };
+          res.writeHead(200);
+          return res.end(JSON.stringify({ success: true, dryRun: true, ticket: simulatedTicket }));
+        }
+
         const ticket = createSupportTicket({
-          title: body.title || descriptionText?.slice(0, 80),
+          title: body.title || descriptionText.slice(0, 80),
           description: descriptionText,
           source: body.source || "API",
           severity: body.severity || "MEDIUM",
@@ -412,7 +439,7 @@ export async function handleOpsGroupsAndSupportRoutes({
           reportedBy: body.reportedBy || body.reported_by || "Storefront / Ops"
         });
         const card = formatTicketCard(ticket);
-        const isSilentProbe = Boolean(body.silent || body.isProbe || body.category === "E2E_PROBE");
+        const isSilentProbe = isTrustedProbe && Boolean(body.silent || body.isProbe);
         if (!isSilentProbe && GROUPS.itHelpdesk?.jid) {
           await safeSendMessage(GROUPS.itHelpdesk.jid, { text: card });
         }
