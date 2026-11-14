@@ -1,16 +1,18 @@
 # Systems Analysis and Design (SAD) Specification
-## Cyber-Physical Studio Ecosystem, Deterministic Multi-Agent Hub & WhatsApp Community Hierarchy
+## Cyber-Physical Studio Ecosystem, Multi-Tenant WebApp Storefronts, Blind Order Guard & WhatsApp Live Orchestration
 
 ```
-Document ID:     SAD-PERPETUAL-2026-V2
+Document ID:     SAD-PERPETUAL-2026-V3
 Classification:  Enterprise Engineering Specification
 Protocol:        Systems Analysis and Design (Dennis, Wixom, & Roth 5th Edition)
-Status:          AUDIT READY / RATIFIED
-Date:            October 24, 2026
+Status:          AUDIT READY / RATIFIED (V3)
+Date:            November 14, 2026
 Author:          Lead Technical Writer & Systems Documentarian
-Codebase:        c:\Users\user\Documents\Perpetual
-System Port:     5050 (Flask Microservice) & 5174 (WhatsApp Baileys Gateway)
-Database:        SQLite (WAL Mode) agent_room.db
+Codebase:        c:\Users\user\Documents\Perpetual & tms-whitelabel-core
+System Port:     5050 (Flask Microservice) | 5174 (WhatsApp & Order Guard Gateway) | 5173 (TMS Whitelabel WebApp)
+Database:        SQLite (WAL Mode) agent_room.db + PostgreSQL / Supabase (20261114_order_guard.sql)
+Companion Specs: docs/WEBAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md
+                 docs/WHATSAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md
 ```
 
 ---
@@ -555,3 +557,21 @@ Validated deterministically in `test_scene_setup.py` and `test_dynamic_instantia
 | **Dynamic Asset Factory** | `room_assets/registry.py` (`AssetRegistry`) | Reflection Factory Pattern |
 | **Event-Driven Listener** | `asset_listener.py` (`RoomAssetListener`) | Event-Driven Architecture (EDA) |
 | **Matrix Coordinate Locking** | `room_assets/core/base.py` (`locking=True`) | Linear Algebraic Rigid Body Kinematics |
+| **Blind Checkout Cryptography** | `whatsapp_gateway/blind_checkout_crypto.mjs` | Split-Key AES-256-GCM (`pii_sealed` / `order_sealed`) + Phone HMAC |
+| **Single Buyable Pool & Order Guard** | `whatsapp_gateway/order_guard.mjs` | Single-Writer Atomic Serialization, EAT Rollover, 10m+3m Hold Sweeper |
+| **Order Guard Relational DDL (3NF)** | `supabase/migrations/20261114_order_guard.sql` | Dennis, Wixom & Roth Ch. 6 (3NF Verified via `normalization_analyzer.py`) |
+| **WebApp Live Orchestration** | `templates/storefront.html` & `tms-whitelabel-core/src/pages/Order.jsx` | See → Act → Remedy & Continue UX (`SAD-WEBAPP-PERPETUAL-2026-V3`) |
+| **WhatsApp Live Orchestration** | `whatsapp_gateway/command_handler.mjs` & `http_routes.mjs` | 3-Tier Per-Shop Groups, 6-Station FSM, 3-Factor Till SMS Verification (`SAD-WHATSAPP-PERPETUAL-2026-V3`) |
+
+---
+
+## 9. Multi-Tenant WebApp & WhatsApp Live Commerce Architecture (SAD V3 Extension)
+
+Full SDLC Phase 1–4 artifacts (Economic Feasibility with `120.46%` ROI and `$95,766.34` NPV, Balanced Context/Level-0/Level-1 DFDs verified by `dfd_validator.py`, 3NF proofs verified by `normalization_analyzer.py`, Structure Charts, and 4-Stage Test Suites) for the live WebApp and WhatsApp orchestration channels are maintained in two dedicated companion specifications:
+
+1. **[`docs/WEBAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md`](./WEBAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md)** (`SAD-WEBAPP-PERPETUAL-2026-V3`):
+   - Covers `templates/storefront.html` (`:5050/storefront`) and `tms-whitelabel-core` (`/s/keby254/order`).
+   - Details split-key AES-256-GCM envelope encryption (`PII_ENCRYPTION_KEY` vs `ORDER_GUARD_KEY`), single buyable pool invariants (`available = daily_cap - held - sold`), `See → Act → Remedy & Continue` UI state transitions, and multi-shop manifest provisioning (`seed_shop.mjs`, `apply_order_guard_all_shops.mjs`).
+2. **[`docs/WHATSAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md`](./WHATSAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md)** (`SAD-WHATSAPP-PERPETUAL-2026-V3`):
+   - Covers per-shop 3-tier WhatsApp groups (`orders_group_jid`, `dispatch_group_jid`, `management_group_jid`), the 6-station fulfillment FSM (`!paid` → `!pack` → `!verify` → `!dispatch` → `!delivered` → `!confirm`), live pool & tier governance (`!pool`, `!tier`, `!approve-order`, `!decline-order`), Hardware Till SIM SMS 3-factor verification, and 15-minute SLA escalation daemons.
+

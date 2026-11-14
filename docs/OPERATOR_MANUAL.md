@@ -1,14 +1,17 @@
 # Operator & Developer Manual
-## Cyber-Physical Studio Ecosystem, Shared Agent Room & WhatsApp Gateway
+## Cyber-Physical Studio Ecosystem, Multi-Tenant WebApp Storefronts, Order Guard & WhatsApp Live Orchestration
 
 ```
-Document ID:     MAN-PERPETUAL-2026-V2
-Target Audience: System Operators, Agent Developers, Creative Directors, DevOps
+Document ID:     MAN-PERPETUAL-2026-V3
+Target Audience: System Operators, Shop Managers, Floor Crew, Agent Developers, DevOps
 Classification:  Standard Operating Procedure & Developer Reference
-Status:          RELEASE READY / UPGRADED
-Date:            October 24, 2026
-Codebase:        c:\Users\user\Documents\Perpetual
-Ports:           5050 (Shared Agent Room) | 5174 (WhatsApp Baileys Gateway)
+Status:          PRODUCTION READY / UPGRADED (V3)
+Date:            November 14, 2026
+Codebase:        c:\Users\user\Documents\Perpetual & tms-whitelabel-core
+Ports:           5050 (Shared Agent Room & Storefront) | 5174 (WhatsApp & Order Guard Gateway) | 5173 (TMS Whitelabel React WebApp)
+Companion Docs:  docs/WEBAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md
+                 docs/WHATSAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md
+                 docs/ORDER_GUARD_AND_WHATSAPP_OPS_GUIDE.md
 ```
 
 ---
@@ -374,3 +377,35 @@ python test_dynamic_instantiation.py
 - [x] `test_room_service.py`: 6/6 tests passed (HTTP 200, 60s lease timeout rollback verified).
 - [x] `test_scene_setup.py`: Zero drift verified across 5 camera poses ($\Delta = 0.00000000$).
 - [x] `test_dynamic_instantiation.py`: 19 asset classes registered, message-driven instantiation verified, zero drift confirmed.
+- [x] `whatsapp_gateway/order_guard.test.mjs`: 26/26 tests passed (AES-256-GCM split-key blindness, 1,000-buyer concurrency stress test with 0 oversell, multi-item rollback, midnight EAT rollover, late-payment `REFUND_REQUIRED`).
+
+---
+
+## 8. Multi-Tenant Live Orchestration Through WebApps & WhatsApp
+
+For complete step-by-step operator instructions on the commerce, Order Guard, and multi-shop fulfillment plane, see the two dedicated companion manuals:
+- **WebApp Live Orchestration Manual & SAD**: [`docs/WEBAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md`](./WEBAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md)
+- **WhatsApp Live Orchestration Manual & SAD**: [`docs/WHATSAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md`](./WHATSAPP_LIVE_ORCHESTRATION_MANUAL_AND_SAD.md)
+
+### 8.1 Quick Reference: Live WebApp Endpoints (`Port 5050` & `Port 5173` → Gateway `Port 5174`)
+- **Unified Storefront UI**: `http://localhost:5050/storefront` (Tabs: `☕ Java House`, `🍗 QuickMart`, `🇰🇪 KEby254`)
+- **TMS Whitelabel React UI**: `http://localhost:5173/s/keby254/order`
+- **Live Catalog + Buyable Pool API**: `GET http://localhost:5174/api/v1/storefront/:slug/catalog`
+- **Blind-Inspected Checkout API**: `POST http://localhost:5174/api/v1/storefront/checkout`
+- **3-Factor Till Payment Claim API**: `POST http://localhost:5174/api/v1/storefront/orders/:id/verify-payment`
+- **Hardware Till SIM SMS Webhook**: `POST http://localhost:5174/api/v1/till/sms-webhook` (`X-Till-Secret`)
+
+### 8.2 Quick Reference: Live WhatsApp Commands (`Port 5174`)
+- **Buyable Pool & Order Guard Governance (Management Group)**:
+  - `!pool today` — Live Cap, Held, Sold, Available per item (`Africa/Nairobi` EAT).
+  - `!pool cap <item_id> <n>` — Update daily buyable pool cap.
+  - `!pool max <item_id> <n>` — Update per-order maximum quantity.
+  - `!pool mode <item_id> <strict|surebet>` — Switch between hard reject and auto-trim.
+  - `!pool apply-defaults [strict|surebet]` — Apply category-smart defaults to all shop items.
+  - `!approve-order <ORDER_ID>` / `!decline-order <ORDER_ID> [reason]` — Approve or release held high-value orders.
+  - `!tier <phone_or_hash> <retail|wholesale|trusted|flagged>` — Set customer policy tier.
+- **6-Station Floor & Dispatch Pipeline**:
+  - `!paid <ID> [Receipt]` → `!pack <ID>` → `!verify <ID>` → `!dispatch <ID> [Rider]` → `!delivered <ID> [Notes]` → `!confirm <ID>`
+- **Catalog, Recovery & End-of-Day**:
+  - `!products`, `!product add|price|stock|delete`, `!reorder <OLD_ID>`, `!resurrect <ID> <Receipt>`, `!eod`
+
