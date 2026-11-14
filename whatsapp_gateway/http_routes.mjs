@@ -10,6 +10,13 @@ import { sealCheckoutEnvelope, unsealWithKey } from "./blind_checkout_crypto.mjs
 import { createSupportTicket, resolveSupportTicket, listSupportTickets, formatTicketCard } from "./support_tickets.mjs";
 import { runScalingCheck, getLastScalingReport } from "./scaling_sentinel.mjs";
 
+if (process.env.NODE_ENV === "production") {
+  const missing = ["PII_ENCRYPTION_KEY", "ORDER_GUARD_KEY", "ORDER_GUARD_HMAC_SECRET"].filter(k => !process.env[k]);
+  if (missing.length > 0) {
+    throw new Error(`[FATAL] Missing required production Order Guard keys: ${missing.join(", ")}`);
+  }
+}
+
 const PII_ENCRYPTION_KEY = process.env.PII_ENCRYPTION_KEY || "dev-pii-encryption-key-isolated";
 const ORDER_GUARD_KEY = process.env.ORDER_GUARD_KEY || "dev-order-guard-inspector-key";
 const ORDER_GUARD_HMAC_SECRET = process.env.ORDER_GUARD_HMAC_SECRET || "dev-order-guard-hmac";
@@ -720,6 +727,29 @@ export function createHttpRouter({ GROUPS, getConnectionState, getBotJid, safeSe
         const orderId = body.orderId || meta.orderId || body.order_id || `ORD-${Date.now().toString().slice(-6)}`;
         const supabaseId = body.supabaseId || meta.supabaseId || null;
         const pickup = customer.address || customer.fulfillmentType || meta.deliveryAddress || meta.fulfillmentType || "In-Store Pickup";
+
+        // Order Guard check on legacy /order & /api/checkout when items are provided
+        if (Array.isArray(items) && items.length > 0) {
+          const shopSlugOrId = body.shop_id || body.shopId || body.tenantId || body.shopSlug || "default";
+          const legacyEnv = sealCheckoutEnvelope({
+            order_id: orderId,
+            shop_id: shopSlugOrId,
+            shop_slug: body.shopSlug || body.tenantId,
+            customer_name: custName,
+            customer_phone: custPhone,
+            delivery_address: pickup,
+            items
+          }, {
+            piiKey: PII_ENCRYPTION_KEY,
+            inspectorKey: ORDER_GUARD_KEY,
+            hmacSecret: ORDER_GUARD_HMAC_SECRET
+          });
+          const ogVerdict = await sharedOrderGuard.inspectAndReserve(legacyEnv);
+          if (ogVerdict.decision === "REJECTED") {
+            res.writeHead(409);
+            return res.end(JSON.stringify({ success: false, ...ogVerdict, can_show_payment: false }));
+          }
+        }
 
         // 0. Instant Pre-Paid Till Pool Lookback (Customer paid Till 1-10m BEFORE clicking Place Order)
         let preMatchedReceipt = null;
