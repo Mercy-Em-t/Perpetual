@@ -6,8 +6,8 @@
   "main": "whatsapp_service.mjs",
   "scripts": {
     "start": "node whatsapp_service.mjs",
-    "test": "node --test order_guard.test.mjs http_routes.test.mjs",
-    "check": "node --check whatsapp_service.mjs && node --check http_routes.mjs && node --check http_routes.test.mjs && node --check routes/ops_groups_and_support.mjs && node --check routes/orders.mjs && node --check routes/till_finance.mjs && node --check routes/storefront.mjs && node --check command_handler.mjs && node --check order_guard.mjs && node --check blind_checkout_crypto.mjs && node --check scaling_sentinel.mjs && node --check support_tickets.mjs"
+    "test": "node --test order_guard.test.mjs http_routes.test.mjs order_lifecycle_7x1000.test.mjs",
+    "check": "node --check whatsapp_service.mjs && node --check http_routes.mjs && node --check http_routes.test.mjs && node --check order_lifecycle_7x1000.test.mjs && node --check routes/ops_groups_and_support.mjs && node --check routes/orders.mjs && node --check routes/till_finance.mjs && node --check routes/storefront.mjs && node --check command_handler.mjs && node --check order_guard.mjs && node --check blind_checkout_crypto.mjs && node --check scaling_sentinel.mjs && node --check support_tickets.mjs"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.19",
