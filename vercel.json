@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "framework": null,
+  "buildCommand": "",
+  "installCommand": "npm install",
   "functions": {
     "api/index.mjs": {
       "maxDuration": 10,
