@@ -27,9 +27,13 @@ export class OrderGuard {
   constructor(options = {}) {
     this.inspectorKey = options.inspectorKey || process.env.ORDER_GUARD_KEY || "dev-order-guard-inspector-key";
     this.hmacSecret = options.hmacSecret || process.env.ORDER_GUARD_HMAC_SECRET || "dev-order-guard-hmac";
+    const defaultStatePath = process.env.VERCEL
+      ? "/tmp/order_guard_state.json"
+      : path.resolve(process.cwd(), "order_guard_state.json");
+    this.seedStateFile = path.resolve(process.cwd(), "order_guard_state.json");
     this.stateFile = options.stateFile !== undefined
       ? options.stateFile
-      : path.resolve(process.cwd(), "order_guard_state.json");
+      : defaultStatePath;
 
     this.defaultHoldTtlMs = options.holdTtlMs ?? 10 * 60 * 1000;       // 10 minutes
     this.defaultGraceTtlMs = options.graceTtlMs ?? 3 * 60 * 1000;     // +3 minutes grace
@@ -55,8 +59,11 @@ export class OrderGuard {
   _loadState() {
     if (!this.stateFile) return;
     try {
-      if (fs.existsSync(this.stateFile)) {
-        const raw = JSON.parse(fs.readFileSync(this.stateFile, "utf-8"));
+      const targetToRead = fs.existsSync(this.stateFile)
+        ? this.stateFile
+        : (this.seedStateFile && fs.existsSync(this.seedStateFile) ? this.seedStateFile : null);
+      if (targetToRead) {
+        const raw = JSON.parse(fs.readFileSync(targetToRead, "utf-8"));
         if (raw && typeof raw === "object") {
           this.state = {
             policies: raw.policies || {},

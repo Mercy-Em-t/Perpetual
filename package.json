@@ -1,0 +1,16 @@
+{
+  "name": "perpetual-microservice",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Perpetual Order Guard, Blind Checkout Cryptography & Multi-Tenant Storefront Microservice",
+  "scripts": {
+    "start": "node whatsapp_gateway/index.mjs",
+    "test": "node --test whatsapp_gateway/order_guard.test.mjs",
+    "seed:shop": "node whatsapp_gateway/seed_shop.mjs",
+    "apply:guard": "node whatsapp_gateway/apply_order_guard_all_shops.mjs"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,29 @@
+# Exclude heavy non-serverless studio, 3D, Python, and credential directories
+# Slashes Vercel Deployment Storage & Functions Storage by >85%
+.git
+.venv
+venv
+__pycache__
+node_modules
+whatsapp_gateway/node_modules
+whatsapp_gateway/.auth_whatsapp_baileys
+.auth_whatsapp_baileys
+spatial_3d_studio
+Acoustic_Modem
+Mercy_Personal_Finance_App
+Savannah_Secure_Home_Server
+nova_perpetual
+legacy_rd
+assets
+feature_leases
+workers
+writers
+docs
+*.db
+*.db-shm
+*.db-wal
+*.pdf
+*.mp4
+*.mov
+*.zip
+*.tar.gz

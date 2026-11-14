@@ -31,7 +31,9 @@ export const sharedOrderGuard = new OrderGuard({
   inspectorKey: ORDER_GUARD_KEY,
   hmacSecret: ORDER_GUARD_HMAC_SECRET
 });
-sharedOrderGuard.startSweeper(60_000);
+if (!process.env.VERCEL) {
+  sharedOrderGuard.startSweeper(60_000);
+}
 
 function getWhitelabelDistDir() {
   const candidates = [

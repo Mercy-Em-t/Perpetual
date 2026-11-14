@@ -50,9 +50,10 @@ export async function handleStorefrontRoutes({
         if (!shop) {
           const fsMod = await import("fs");
           const pathMod = await import("path");
+          const repoRootCfgPath = pathMod.resolve(import.meta.dirname, "..", "..", "config", "shops", `${slug}.json`);
           const rootCfgPath = pathMod.resolve(import.meta.dirname, "..", "config", "shops", `${slug}.json`);
           const cwdCfgPath = pathMod.resolve(process.cwd(), "config", "shops", `${slug}.json`);
-          const localCfgPath = fsMod.existsSync(rootCfgPath) ? rootCfgPath : cwdCfgPath;
+          const localCfgPath = [repoRootCfgPath, rootCfgPath, cwdCfgPath].find(p => fsMod.existsSync(p)) || cwdCfgPath;
           if (fsMod.existsSync(localCfgPath)) {
             const cfg = JSON.parse(fsMod.readFileSync(localCfgPath, "utf-8"));
             shop = {
@@ -87,6 +88,7 @@ export async function handleStorefrontRoutes({
           };
         });
 
+        res.setHeader("Cache-Control", "public, s-maxage=10, stale-while-revalidate=50");
         res.writeHead(200);
         return res.end(JSON.stringify({
           success: true,

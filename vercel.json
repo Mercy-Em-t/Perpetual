@@ -1,0 +1,67 @@
+{
+  "version": 2,
+  "functions": {
+    "api/index.mjs": {
+      "maxDuration": 10,
+      "includeFiles": "{config/**,templates/storefront.html,order_guard_state.json}"
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/v1/storefront/:slug/catalog",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=10, stale-while-revalidate=50"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization, X-Till-Secret"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/storefront",
+      "destination": "/api/index.mjs"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/index.mjs"
+    },
+    {
+      "source": "/groups",
+      "destination": "/api/index.mjs"
+    },
+    {
+      "source": "/order",
+      "destination": "/api/index.mjs"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.mjs"
+    },
+    {
+      "source": "/",
+      "destination": "/api/index.mjs"
+    }
+  ]
+}
