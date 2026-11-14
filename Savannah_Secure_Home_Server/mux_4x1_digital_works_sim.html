@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Digital Works 4x1 Multiplexer Lab #2 — Interactive Logic Simulator</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card: #111827;
+      --border: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --hi: #ef4444; /* Logic 1 (High - Red in Digital Works) */
+      --lo: #3b82f6; /* Logic 0 (Low - Blue) */
+      --accent: #38bdf8;
+      --gold: #facc15;
+      --emerald: #10b981;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+    .container { max-width: 1280px; margin: 0 auto; }
+    .header-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 24px;
+      margin-bottom: 20px;
+    }
+    h1 { margin: 0; font-size: 20px; color: var(--accent); }
+    .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .student-inputs {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .student-inputs input {
+      background: #090d16;
+      color: var(--gold);
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.55fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 1024px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .switch-group {
+      display: flex;
+      gap: 12px;
+    }
+    .sw-btn {
+      background: #1e293b;
+      border: 2px solid #334155;
+      color: #fff;
+      border-radius: 10px;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 15px;
+      transition: all 0.15s;
+      min-width: 78px;
+      text-align: center;
+    }
+    .sw-btn.active {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: var(--hi);
+      color: #fca5a5;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
+    }
+    .mode-tabs button {
+      background: #1e293b;
+      color: var(--muted);
+      border: 1px solid #334155;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .mode-tabs button.active {
+      background: #0284c7;
+      color: #fff;
+      border-color: #38bdf8;
+    }
+    svg {
+      width: 100%;
+      height: auto;
+      background: #070b14;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+      font-family: 'Consolas', monospace;
+    }
+    th, td {
+      padding: 6px 8px;
+      text-align: center;
+      border-bottom: 1px solid #1e293b;
+    }
+    th { background: #090d16; color: var(--accent); font-weight: 700; }
+    tr.active-row {
+      background: rgba(56, 189, 248, 0.18) !important;
+      outline: 1px solid var(--accent);
+    }
+    tr:hover { background: rgba(255,255,255,0.04); cursor: pointer; }
+    .badge-1 { color: #f87171; font-weight: 800; }
+    .badge-0 { color: #64748b; }
+    .formula-box {
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-top: 14px;
+      font-family: 'Consolas', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header-bar">
+    <div>
+      <h1>Lab Question #2: 4×1 Multiplexer Implementation — F(A,B,C,D) = Σ(1, 2, 5, 7, 8, 10, 11, 13, 15)</h1>
+      <div class="sub">Interactive Digital Works Schematic &amp; Truth-Table State Tester (Click any input switch A, B, C, D or table row)</div>
+    </div>
+    <div class="student-inputs">
+      <input id="stuName" value="Mercy Tryphen Emurugat" oninput="renderCircuit()" placeholder="Student Name" />
+      <input id="stuId" value="ID: 2026-ECE-MUX4" oninput="renderCircuit()" placeholder="Student ID" />
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Left Column: Interactive Digital Works Canvas -->
+    <div class="card">
+      <div class="controls-row">
+        <div class="switch-group">
+          <button class="sw-btn" id="btnA" onclick="toggleVar('A')">A (s₁): <span id="valA">0</span></button>
+          <button class="sw-btn" id="btnB" onclick="toggleVar('B')">B (s₀): <span id="valB">0</span></button>
+          <button class="sw-btn" id="btnC" onclick="toggleVar('C')">C: <span id="valC">0</span></button>
+          <button class="sw-btn" id="btnD" onclick="toggleVar('D')">D: <span id="valD">1</span></button>
+        </div>
+        <div class="mode-tabs">
+          <button id="tab2d" class="active" onclick="setArch('2d')">Figure 2(d): Gate-Level 3-Input ANDs</button>
+          <button id="tab2c" onclick="setArch('2c')">Figure 2(c): 2-to-4 Decoder + ANDs</button>
+        </div>
+      </div>
+
+      <svg id="schematicSvg" viewBox="0 0 820 540"></svg>
+
+      <div class="formula-box">
+        <strong style="color:#38bdf8;">Step-by-Step Simplified Data Line Equations (Rules #1–#3):</strong><br/>
+        • <b>Selection Lines:</b> s₁ = A (MSB), s₀ = B (LSB)<br/>
+        • <b>AB = 00 (D₀):</b> minterms (1, 2) = C'D + CD' = <span style="color:#facc15;">C ⊕ D</span> (1 XOR gate)<br/>
+        • <b>AB = 01 (D₁):</b> minterms (5, 7) = C'D + CD = <span style="color:#4ade80;">D</span> (Direct wire)<br/>
+        • <b>AB = 10 (D₂):</b> minterms (8, 10, 11) = C'D' + CD' + CD = <span style="color:#f472b6;">C + D'</span> (1 NOT + 1 OR gate)<br/>
+        • <b>AB = 11 (D₃):</b> minterms (13, 15) = C'D + CD = <span style="color:#4ade80;">D</span> (Direct wire shared with D₁)
+      </div>
+    </div>
+
+    <!-- Right Column: 16-State Truth Table & State Documentation -->
+    <div class="card">
+      <h3 style="margin:0 0 10px 0; color:#38bdf8; font-size:15px;">Rule #5: 16-State Truth Table &amp; MUX Routing Log</h3>
+      <p style="margin:0 0 12px 0; font-size:12px; color:#94a3b8;">Click any row below to load that exact binary input state (ABCD) onto the Digital Works canvas:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>m</th>
+            <th>A (s₁)</th>
+            <th>B (s₀)</th>
+            <th>C</th>
+            <th>D</th>
+            <th>Selected</th>
+            <th>D₀</th>
+            <th>D₁</th>
+            <th>D₂</th>
+            <th>D₃</th>
+            <th>Output Y</th>
+          </tr>
+        </thead>
+        <tbody id="truthBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  const state = { A: 0, B: 0, C: 0, D: 1, arch: '2d' };
+  const MINTERMS = new Set([1, 2, 5, 7, 8, 10, 11, 13, 15]);
+
+  function toggleVar(v) {
+    state[v] = state[v] ? 0 : 1;
+    renderCircuit();
+  }
+
+  function setArch(a) {
+    state.arch = a;
+    document.getElementById('tab2d').classList.toggle('active', a === '2d');
+    document.getElementById('tab2c').classList.toggle('active', a === '2c');
+    renderCircuit();
+  }
+
+  function setMinterm(m) {
+    state.A = (m >> 3) & 1;
+    state.B = (m >> 2) & 1;
+    state.C = (m >> 1) & 1;
+    state.D = m & 1;
+    renderCircuit();
+  }
+
+  function wireColor(bit) {
+    return bit ? '#ef4444' : '#3b82f6';
+  }
+
+  function renderCircuit() {
+    const { A, B, C, D, arch } = state;
+    ['A', 'B', 'C', 'D'].forEach(k => {
+      document.getElementById('val' + k).textContent = state[k];
+      document.getElementById('btn' + k).classList.toggle('active', state[k] === 1);
+    });
+
+    // External gates math
+    const notD = D ? 0 : 1;
+    const D0 = C ^ D;
+    const D1 = D;
+    const D2 = (C | notD) ? 1 : 0;
+    const D3 = D;
+
+    // Selection math
+    const notA = A ? 0 : 1;
+    const notB = B ? 0 : 1;
+    const dec0 = (notA & notB) ? 1 : 0;
+    const dec1 = (notA & B) ? 1 : 0;
+    const dec2 = (A & notB) ? 1 : 0;
+    const dec3 = (A & B) ? 1 : 0;
+
+    const g0 = (D0 & dec0) ? 1 : 0;
+    const g1 = (D1 & dec1) ? 1 : 0;
+    const g2 = (D2 & dec2) ? 1 : 0;
+    const g3 = (D3 & dec3) ? 1 : 0;
+    const Y  = (g0 | g1 | g2 | g3) ? 1 : 0;
+    const currentM = (A << 3) | (B << 2) | (C << 1) | D;
+
+    const stuName = document.getElementById('stuName').value || 'Student Name';
+    const stuId = document.getElementById('stuId').value || 'Student ID';
+
+    const svg = document.getElementById('schematicSvg');
+    svg.innerHTML = `
+      <!-- Embedded Student Name & ID Canvas Stamp (Rule #5) -->
+      <rect x="16" y="12" width="460" height="42" rx="8" fill="#111827" stroke="#facc15" stroke-width="1.5"/>
+      <text x="28" y="30" fill="#facc15" font-size="13" font-weight="bold" font-family="monospace">DIGITAL WORKS CANVAS — ${stuName}</text>
+      <text x="28" y="46" fill="#94a3b8" font-size="11" font-family="monospace">${stuId} | F(A,B,C,D) = Σ(1,2,5,7,8,10,11,13,15) | Active State: m${currentM} (${A}${B}${C}${D})</text>
+
+      <!-- External Gating Box Label -->
+      <rect x="16" y="66" width="290" height="310" rx="10" fill="none" stroke="#334155" stroke-dasharray="5,5"/>
+      <text x="28" y="86" fill="#38bdf8" font-size="12" font-weight="bold">EXTERNAL GATES (Inputs C, D → D₀..D₃)</text>
+
+      <!-- Input C & D Rails -->
+      <rect x="28" y="105" width="38" height="26" rx="5" fill="${C ? '#7f1d1d' : '#1e293b'}" stroke="${wireColor(C)}" stroke-width="2"/>
+      <text x="47" y="123" fill="#fff" font-size="13" font-weight="bold" text-anchor="middle">C=${C}</text>
+      <line x1="66" y1="118" x2="100" y2="118" stroke="${wireColor(C)}" stroke-width="3"/>
+      <line x1="100" y1="118" x2="100" y2="255" stroke="${wireColor(C)}" stroke-width="3"/>
+
+      <rect x="28" y="165" width="38" height="26" rx="5" fill="${D ? '#7f1d1d' : '#1e293b'}" stroke="${wireColor(D)}" stroke-width="2"/>
+      <text x="47" y="183" fill="#fff" font-size="13" font-weight="bold" text-anchor="middle">D=${D}</text>
+      <line x1="66" y1="178" x2="130" y2="178" stroke="${wireColor(D)}" stroke-width="3"/>
+      <line x1="130" y1="178" x2="130" y2="335" stroke="${wireColor(D)}" stroke-width="3"/>
+
+      <!-- D0 = C XOR D -->
+      <line x1="100" y1="118" x2="175" y2="118" stroke="${wireColor(C)}" stroke-width="3"/>
+      <line x1="130" y1="134" x2="175" y2="134" stroke="${wireColor(D)}" stroke-width="3"/>
+      <path d="M170,108 Q182,126 170,144" fill="none" stroke="#e2e8f0" stroke-width="2.5"/>
+      <path d="M178,108 Q190,126 178,144 Q212,144 226,126 Q212,108 178,108 Z" fill="#1e293b" stroke="#facc15" stroke-width="2"/>
+      <text x="198" y="130" fill="#facc15" font-size="10" font-weight="bold" text-anchor="middle">XOR</text>
+      <line x1="226" y1="126" x2="430" y2="126" stroke="${wireColor(D0)}" stroke-width="3"/>
+      <text x="320" y="119" fill="#facc15" font-size="12" font-weight="bold">D₀ = C⊕D = ${D0}</text>
+
+      <!-- D1 = D (Direct Wire) -->
+      <line x1="130" y1="196" x2="430" y2="196" stroke="${wireColor(D1)}" stroke-width="3"/>
+      <text x="320" y="189" fill="#4ade80" font-size="12" font-weight="bold">D₁ = D = ${D1}</text>
+
+      <!-- D2 = C + D' (NOT on D + OR gate) -->
+      <line x1="130" y1="278" x2="155" y2="278" stroke="${wireColor(D)}" stroke-width="3"/>
+      <polygon points="155,268 155,288 175,278" fill="#1e293b" stroke="#f472b6" stroke-width="2"/>
+      <circle cx="179" cy="278" r="4" fill="#1e293b" stroke="#f472b6" stroke-width="2"/>
+      <line x1="183" y1="278" x2="205" y2="278" stroke="${wireColor(notD)}" stroke-width="3"/>
+      <line x1="100" y1="255" x2="205" y2="255" stroke="${wireColor(C)}" stroke-width="3"/>
+      <path d="M202,246 Q214,266 202,286 Q236,286 252,266 Q236,246 202,246 Z" fill="#1e293b" stroke="#f472b6" stroke-width="2"/>
+      <text x="224" y="270" fill="#f472b6" font-size="10" font-weight="bold" text-anchor="middle">OR</text>
+      <line x1="252" y1="266" x2="430" y2="266" stroke="${wireColor(D2)}" stroke-width="3"/>
+      <text x="320" y="259" fill="#f472b6" font-size="12" font-weight="bold">D₂ = C+D' = ${D2}</text>
+
+      <!-- D3 = D (Direct Wire) -->
+      <line x1="130" y1="335" x2="430" y2="335" stroke="${wireColor(D3)}" stroke-width="3"/>
+      <text x="320" y="328" fill="#4ade80" font-size="12" font-weight="bold">D₃ = D = ${D3}</text>
+
+      <!-- 4x1 Multiplexer Block -->
+      <rect x="395" y="66" width="290" height="450" rx="12" fill="none" stroke="#38bdf8" stroke-dasharray="6,4"/>
+      <text x="410" y="86" fill="#38bdf8" font-size="12" font-weight="bold">4×1 MULTIPLEXER (${arch === '2d' ? 'Figure 2d: 3-Input ANDs' : 'Figure 2c: 2-to-4 Decoder'})</text>
+
+      <!-- Four AND Gates inside MUX -->
+      ${[0, 1, 2, 3].map((idx) => {
+        const cy = 126 + idx * 70;
+        const gVal = [g0, g1, g2, g3][idx];
+        return `
+          <path d="M430,${cy - 18} L465,${cy - 18} A18,18 0 0,1 465,${cy + 18} L430,${cy + 18} Z" fill="#1e293b" stroke="${gVal ? '#ef4444' : '#64748b'}" stroke-width="2.2"/>
+          <text x="454" y="${cy + 4}" fill="#e2e8f0" font-size="10" font-weight="bold" text-anchor="middle">AND</text>
+          <line x1="483" y1="${cy}" x2="565" y2="${225 + (idx - 1.5) * 14}" stroke="${wireColor(gVal)}" stroke-width="3"/>
+        `;
+      }).join('')}
+
+      <!-- Final 4-Input OR Gate -->
+      <path d="M560,195 Q576,225 560,255 Q605,255 628,225 Q605,195 560,195 Z" fill="#1e293b" stroke="#4ade80" stroke-width="2.5"/>
+      <text x="590" y="229" fill="#4ade80" font-size="11" font-weight="bold" text-anchor="middle">OR</text>
+
+      <!-- Output Y LED Probe -->
+      <line x1="628" y1="225" x2="715" y2="225" stroke="${wireColor(Y)}" stroke-width="4"/>
+      <circle cx="745" cy="225" r="26" fill="${Y ? '#dc2626' : '#1e293b'}" stroke="${Y ? '#fca5a5' : '#475569'}" stroke-width="3"/>
+      <text x="745" y="231" fill="#fff" font-size="18" font-weight="bold" text-anchor="middle">Y=${Y}</text>
+      <text x="745" y="268" fill="${Y ? '#fca5a5' : '#94a3b8'}" font-size="12" font-weight="bold" text-anchor="middle">${Y ? 'LOGIC 1 (HIGH)' : 'LOGIC 0 (LOW)'}</text>
+
+      <!-- Selection Lines s1 = A (MSB) & s0 = B (LSB) at Bottom -->
+      <rect x="415" y="472" width="54" height="28" rx="5" fill="${B ? '#7f1d1d' : '#1e293b'}" stroke="${wireColor(B)}" stroke-width="2"/>
+      <text x="442" y="490" fill="#fff" font-size="12" font-weight="bold" text-anchor="middle">s₀(B)=${B}</text>
+
+      <rect x="505" y="472" width="54" height="28" rx="5" fill="${A ? '#7f1d1d' : '#1e293b'}" stroke="${wireColor(A)}" stroke-width="2"/>
+      <text x="532" y="490" fill="#fff" font-size="12" font-weight="bold" text-anchor="middle">s₁(A)=${A}</text>
+
+      ${arch === '2c' ? `
+        <!-- 2-to-4 Decoder Block (Figure 2c) -->
+        <rect x="415" y="395" width="150" height="52" rx="8" fill="#1e293b" stroke="#facc15" stroke-width="2"/>
+        <text x="490" y="418" fill="#facc15" font-size="12" font-weight="bold" text-anchor="middle">2-to-4 DECODER</text>
+        <text x="490" y="435" fill="#cbd5e1" font-size="11" font-family="monospace" text-anchor="middle">Out: [${dec0}, ${dec1}, ${dec2}, ${dec3}]</text>
+        <line x1="442" y1="472" x2="442" y2="447" stroke="${wireColor(B)}" stroke-width="3"/>
+        <line x1="532" y1="472" x2="532" y2="447" stroke="${wireColor(A)}" stroke-width="3"/>
+        <line x1="425" y1="395" x2="425" y2="136" stroke="${wireColor(dec0)}" stroke-width="2"/>
+        <line x1="425" y1="136" x2="430" y2="136" stroke="${wireColor(dec0)}" stroke-width="2"/>
+        <line x1="420" y1="395" x2="420" y2="206" stroke="${wireColor(dec1)}" stroke-width="2"/>
+        <line x1="420" y1="206" x2="430" y2="206" stroke="${wireColor(dec1)}" stroke-width="2"/>
+        <line x1="415" y1="395" x2="415" y2="276" stroke="${wireColor(dec2)}" stroke-width="2"/>
+        <line x1="415" y1="276" x2="430" y2="276" stroke="${wireColor(dec2)}" stroke-width="2"/>
+        <line x1="410" y1="395" x2="410" y2="346" stroke="${wireColor(dec3)}" stroke-width="2"/>
+        <line x1="410" y1="346" x2="430" y2="346" stroke="${wireColor(dec3)}" stroke-width="2"/>
+      ` : `
+        <!-- Two NOT Gates & Selection Rails (Figure 2d) -->
+        <polygon points="415,432 431,432 423,416" fill="#1e293b" stroke="#facc15" stroke-width="1.8"/>
+        <circle cx="423" cy="412" r="3.5" fill="#1e293b" stroke="#facc15" stroke-width="1.8"/>
+        <text x="403" y="428" fill="#94a3b8" font-size="10">B'</text>
+        <line x1="442" y1="472" x2="442" y2="138" stroke="${wireColor(B)}" stroke-width="2"/>
+        <line x1="423" y1="410" x2="423" y2="132" stroke="${wireColor(notB)}" stroke-width="2"/>
+
+        <polygon points="505,432 521,432 513,416" fill="#1e293b" stroke="#facc15" stroke-width="1.8"/>
+        <circle cx="513" cy="412" r="3.5" fill="#1e293b" stroke="#facc15" stroke-width="1.8"/>
+        <text x="493" y="428" fill="#94a3b8" font-size="10">A'</text>
+        <line x1="532" y1="472" x2="532" y2="278" stroke="${wireColor(A)}" stroke-width="2"/>
+        <line x1="513" y1="410" x2="513" y2="138" stroke="${wireColor(notA)}" stroke-width="2"/>
+      `}
+    `;
+
+    // Populate 16-row Truth Table
+    const tbody = document.getElementById('truthBody');
+    let rowsHtml = '';
+    for (let m = 0; m < 16; m++) {
+      const rA = (m >> 3) & 1;
+      const rB = (m >> 2) & 1;
+      const rC = (m >> 1) & 1;
+      const rD = m & 1;
+      const rD0 = rC ^ rD;
+      const rD1 = rD;
+      const rD2 = (rC | (rD ? 0 : 1)) ? 1 : 0;
+      const rD3 = rD;
+      const sel = (rA << 1) | rB;
+      const rY = [rD0, rD1, rD2, rD3][sel];
+      const isAct = (m === currentM);
+      rowsHtml += `
+        <tr class="${isAct ? 'active-row' : ''}" onclick="setMinterm(${m})">
+          <td><b>m${m}</b></td>
+          <td>${rA}</td>
+          <td>${rB}</td>
+          <td>${rC}</td>
+          <td>${rD}</td>
+          <td style="color:#facc15;font-weight:bold;">D${sel}</td>
+          <td class="badge-${rD0}">${rD0}</td>
+          <td class="badge-${rD1}">${rD1}</td>
+          <td class="badge-${rD2}">${rD2}</td>
+          <td class="badge-${rD3}">${rD3}</td>
+          <td class="badge-${rY}">${rY}</td>
+        </tr>
+      `;
+    }
+    tbody.innerHTML = rowsHtml;
+  }
+
+  renderCircuit();
+</script>
+</body>
+</html>

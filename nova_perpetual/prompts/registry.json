@@ -1,0 +1,17 @@
+{
+  "active": "v1",
+  "versions": {
+    "v1": {
+      "file": "system.v1.md",
+      "sha256": "74737c9081fa3ea2543468fd4af795c29eef007d3aa6f50cbbb8e0a08cc19794",
+      "registered_at": 1793354411.066685,
+      "eval": {
+        "passed": true,
+        "sha256": "74737c9081fa3ea2543468fd4af795c29eef007d3aa6f50cbbb8e0a08cc19794",
+        "at": 1793354449.2080047,
+        "score": 16,
+        "total": 16
+      }
+    }
+  }
+}

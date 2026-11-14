@@ -1,0 +1,22 @@
+http:
+  routers:
+    whatsapp-service-http:
+      rule: Host(`wa.tmsavannah.com`) || Host(`wa.missperpetual.cloud`) || Host(`missperpetual.cloud`)
+      entryPoints:
+        - web
+      service: whatsapp-service-backend
+      middlewares:
+        - redirect-to-https
+    whatsapp-service-https:
+      rule: Host(`wa.tmsavannah.com`) || Host(`wa.missperpetual.cloud`) || Host(`missperpetual.cloud`)
+      entryPoints:
+        - websecure
+      service: whatsapp-service-backend
+      tls:
+        certResolver: letsencrypt
+  services:
+    whatsapp-service-backend:
+      loadBalancer:
+        servers:
+          - url: http://172.18.0.1:8085
+        passHostHeader: true

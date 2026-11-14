@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#0c4a6e"/>
+      <stop offset="100%" stop-color="#065f46"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#34d399"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="192" fill="none" stroke="url(#accent)" stroke-width="14" opacity="0.25"/>
+  <!-- Rising Bar Chart -->
+  <rect x="128" y="280" width="44" height="96" rx="10" fill="#38bdf8"/>
+  <rect x="196" y="224" width="44" height="152" rx="10" fill="#2dd4bf"/>
+  <rect x="264" y="168" width="44" height="208" rx="10" fill="#34d399"/>
+  <rect x="332" y="120" width="44" height="256" rx="10" fill="#a7f3d0"/>
+  <!-- Currency / Shield Badge -->
+  <circle cx="176" cy="156" r="46" fill="#0f172a" stroke="#38bdf8" stroke-width="8"/>
+  <text x="176" y="172" font-family="system-ui, sans-serif" font-size="44" font-weight="900" fill="#38bdf8" text-anchor="middle">K</text>
+</svg>

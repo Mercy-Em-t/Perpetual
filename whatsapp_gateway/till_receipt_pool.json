@@ -1,0 +1,19 @@
+[
+  {
+    "code": "UK6DC1DCIM",
+    "direction": "INFLOW",
+    "amount": 1,
+    "fee": 0,
+    "reported_balance": 26.56,
+    "previous_balance": null,
+    "expected_balance": null,
+    "balance_variance": 0,
+    "payer_phone": "254710720949",
+    "payer_name": "MERCY TRYPHEN EMURUGAT",
+    "sim_slot": "REDMI_TILL_BACKFILL",
+    "raw_sms": "UK6DC1DCIM Confirmed.on 6/11/26 at 4:35 PMKSH1.00 received from 254710720949 MERCY TRYPHEN EMURUGAT. New Account balance is KSH26.56. Transaction cost, KSH0.00.  Receiving payments of Ksh 500 & below in your Lipa na M-PESA till is now FREE!",
+    "status": "UNCLAIMED_POOL",
+    "order_id": null,
+    "received_at": "2026-11-06T13:35:00.000Z"
+  }
+]

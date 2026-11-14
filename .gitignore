@@ -32,3 +32,7 @@ app-state-sync-key*
 Thumbs.db
 .vscode/
 .idea/
+
+# Runtime Gateway & Order Guard State
+order_guard_state.json
+whatsapp_gateway/data/

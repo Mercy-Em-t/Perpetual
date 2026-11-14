@@ -6,7 +6,8 @@
   "main": "whatsapp_service.mjs",
   "scripts": {
     "start": "node whatsapp_service.mjs",
-    "check": "node --check whatsapp_service.mjs"
+    "test": "node --test order_guard.test.mjs",
+    "check": "node --check whatsapp_service.mjs && node --check http_routes.mjs && node --check command_handler.mjs && node --check order_guard.mjs && node --check blind_checkout_crypto.mjs && node --check scaling_sentinel.mjs && node --check support_tickets.mjs"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.19",

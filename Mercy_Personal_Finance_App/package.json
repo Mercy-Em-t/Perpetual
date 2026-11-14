@@ -1,0 +1,10 @@
+{
+  "name": "mercy-personal-finance-app",
+  "version": "1.0.0",
+  "description": "Standalone Personal Financial Reporter, Budget Manager & M-Pesa/DTB/Okoa Analyzer (PWA + Desktop + Android)",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

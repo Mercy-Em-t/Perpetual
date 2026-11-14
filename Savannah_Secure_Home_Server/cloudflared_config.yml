@@ -1,0 +1,15 @@
+tunnel: c413f311-5844-4d61-bad4-af3aff0639df
+credentials-file: /etc/cloudflared/c413f311-5844-4d61-bad4-af3aff0639df.json
+
+ingress:
+  - hostname: wa.missperpetual.cloud
+    service: http://localhost:8085
+  - hostname: missperpetual.cloud
+    service: http://localhost:8085
+  - hostname: api.missperpetual.cloud
+    service: http://localhost:8085
+  - hostname: wa.tmsavannah.com
+    service: http://localhost:8085
+  - hostname: "*.trycloudflare.com"
+    service: http://localhost:8085
+  - service: http://localhost:8085

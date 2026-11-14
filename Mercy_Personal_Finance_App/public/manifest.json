@@ -1,0 +1,18 @@
+{
+  "name": "Mercy Personal Finance & M-Pesa Analyzer",
+  "short_name": "Mercy Finance",
+  "description": "Private M-Pesa, DTB Bank, Safaricom Data & Okoa Jahazi Expense Tracker with Offline Mode & Live Redmi Note 12 Sync",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#0284c7",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

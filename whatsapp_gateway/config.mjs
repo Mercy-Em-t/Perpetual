@@ -90,5 +90,24 @@ export const GROUPS = {
       `• !shops [query] (Directory of all stores & WhatsApp links)\n` +
       `• !shop bind <slug> [ops | mgmt] (Onboard a new WhatsApp group)\n` +
       `• !status | !help`
+  },
+  dailyRegisterAudit: {
+    name: "Perpetua - Daily Register & Audit",
+    role: "audit",
+    jid: "120363414989313710@g.us",
+    welcome:
+      `📊 *Perpetua Daily Register & Audit Channel Active*\n\n` +
+      `Dedicated channel for automated multi-tenant register closures, continuous M-Pesa till reconciliation, and platform GMV auditing.\n\n` +
+      `• Nightly 9:05 PM automated closure dispatch\n` +
+      `• Forensic ledger variance tracking\n` +
+      `• Multi-store settlement audits\n\n` +
+      `_Type *!eod* for live platform closure or *!eod <shop>* for single store audit._`,
+    description:
+      `📊 Perpetua Daily Register & Audit Channel\n\n` +
+      `Dedicated channel for automated multi-tenant register closures, continuous M-Pesa till reconciliation, and platform GMV auditing.\n\n` +
+      `Commands:\n` +
+      `• !eod [platform | <shop_slug> | dispatch]\n` +
+      `• !reconcile\n` +
+      `• !summary`
   }
 };

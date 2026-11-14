@@ -1,0 +1,35 @@
+{
+  "shop_id": null,
+  "shop_slug": "your-shop-slug",
+  "name": "Your Shop Name",
+  "logo_emoji": "🏬",
+  "tagline": "Your shop tagline",
+  "accent_color": "#111827",
+  "industry": "retail",
+  "currency": "KES",
+  "order_prefix": "ORD",
+  "mpesa_till_number": "REPLACE_WITH_PRODUCTION_TILL",
+  "whatsapp_groups": {
+    "operations_jid": "REPLACE_WITH_OPS_JID@g.us",
+    "management_jid": "REPLACE_WITH_MGMT_JID@g.us",
+    "community_jid": "REPLACE_WITH_COMMUNITY_JID@g.us"
+  },
+  "products": [
+    {
+      "sku": "your-shop-sample-item",
+      "name": "Sample Product",
+      "category": "General",
+      "price": 100,
+      "description": "Replace with product description.",
+      "daily_cap": 50,
+      "max_per_order": 10,
+      "max_per_customer_per_day": 15,
+      "min_qty": 1,
+      "step_qty": 1,
+      "partial_fill_mode": "strict",
+      "attributes": {
+        "colors": ["Black", "White"]
+      }
+    }
+  ]
+}

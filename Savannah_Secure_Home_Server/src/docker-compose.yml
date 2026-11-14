@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  reverse-proxy:
+    image: nginx:alpine
+    container_name: savannah-reverse-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - frontend-net
+      - backend-net
+
+  cloudflared-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: savannah-cloudflared
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN:-dummy_token}
+    networks:
+      - frontend-net
+
+  core-api:
+    build:
+      context: ..
+      dockerfile: src/Dockerfile
+    container_name: savannah-core-api
+    restart: unless-stopped
+    environment:
+      - PYTHON_GIL=0
+      - DATABASE_URL=postgresql://user:pass@postgres-db:5432/savannah
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.50'
+    networks:
+      - backend-net
+
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: savannah-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=savannah
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    networks:
+      - backend-net
+
+networks:
+  frontend-net:
+    driver: bridge
+  backend-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+
