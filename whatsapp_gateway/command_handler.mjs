@@ -30,6 +30,7 @@ import {
 export const KNOWN_COMMANDS = [
   "help", "status", "health", "orders", "order", "details",
   "paid", "clear", "pair", "pack", "verify", "dispatch", "delivered", "confirm",
+  "second", "unseconded", "ghosts",
   "summary", "sales", "pulse", "eod", "reconcile", "closure",
   "product", "item", "items", "catalog",
   "approve", "hide", "drafts", "policy",
@@ -1632,6 +1633,85 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Failed to execute EOD reconciliation: ${err.message}` });
+      return;
+    }
+  }
+
+  // 3c. Unseconded / Ghost Payment Auditing: !unseconded, !ghosts, !second
+  if (command === "!unseconded" || command === "!ghosts") {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?status=eq.paid&internal_status=in.(PROVISIONALLY_CLEARED,GHOST_PAYMENT_SUSPECT)&order=created_at.desc&limit=15`, { headers: dbHdrs });
+      const orders = await res.json();
+      if (!Array.isArray(orders) || orders.length === 0) {
+        await safeSendMessage(replyJid, { text: `🛡️ *Zero Ghost Payments:* All provisionally cleared orders are 100% corroborated and seconded by Till SMS!` });
+        return;
+      }
+      let msg = `⚠️ *[UNSECONDED PROVISIONAL ORDERS — ${orders.length} ACTIVE]*\n`;
+      msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      orders.forEach((o, i) => {
+        const shortId = o.id.slice(0, 8).toUpperCase();
+        const code = o.mpesa_code || "NO_CODE";
+        const amt = Number(o.total_price || 0).toLocaleString();
+        const client = o.client_name || o.client_phone || "Customer";
+        const mins = Math.round((Date.now() - new Date(o.updated_at || o.created_at).getTime()) / 60000);
+        const warn = mins >= 60 ? "🚨 GHOST SUSPECT" : "⏳ WAITING SMS";
+        msg += `${i + 1}. *#${shortId}* — KES ${amt} [\`${code}\`]\n   • ${client} (${mins}m ago) [${warn}]\n`;
+      });
+      msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      msg += `👉 _To second an order manually after checking Till phone:_ \`!second <order_id> <mpesa_code>\``;
+      await safeSendMessage(replyJid, { text: msg });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Failed to query unseconded orders: ${err.message}` });
+      return;
+    }
+  }
+
+  if (command === "!second") {
+    const match = args.match(/^(\S+)(?:\s+(\S+))?$/i);
+    if (!match) {
+      await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!second <order_id> [mpesa_code]\`` });
+      return;
+    }
+    const orderId = match[1];
+    const code = match[2]?.toUpperCase();
+    try {
+      const o = await resolveShopOrder(null, orderId);
+      if (!o) {
+        await safeSendMessage(replyJid, { text: `❌ Order \`${orderId}\` not found across stores.` });
+        return;
+      }
+      const finalCode = code || o.mpesa_code || "MANUAL_SECOND";
+      const timeStr = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+      const newNotes = o.notes ? `${o.notes}\n• [${timeStr} MANUAL-SECOND]: Seconded by @${callerName} (${finalCode})` : `• [${timeStr} MANUAL-SECOND]: Seconded by @${callerName} (${finalCode})`;
+      await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${o.id}`, {
+        method: "PATCH",
+        headers: { ...dbHdrs, Prefer: "return=minimal" },
+        body: JSON.stringify({
+          status: "paid",
+          internal_status: "FULLY_SECONDED",
+          mpesa_code: finalCode,
+          notes: newNotes
+        })
+      });
+      await fetch(`${SUPABASE_URL}/rest/v1/payment_audit_log`, {
+        method: "POST",
+        headers: { ...dbHdrs, Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify({
+          checkout_request_id: finalCode,
+          target_table: "orders",
+          target_id: o.id,
+          amount: Number(o.total_price),
+          currency: "KES",
+          status: "seconded"
+        })
+      });
+      await safeSendMessage(replyJid, {
+        text: `✅ *[ORDER MANUALLY SECONDED]*\n• Order: *#${o.id.slice(0, 8).toUpperCase()}*\n• Ref: \`${finalCode}\`\n• Status: *FULLY_SECONDED* 🛡️\n• Seconded By: @${callerName}`
+      });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Failed to second order: ${err.message}` });
       return;
     }
   }

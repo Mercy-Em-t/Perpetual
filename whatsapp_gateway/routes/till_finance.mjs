@@ -238,33 +238,50 @@ export async function handleTillFinanceRoutes({
           "Content-Type": "application/json"
         };
 
-        // 1. Single-Use Deduplication Check
-        const dupRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?mpesa_code=eq.${mpesaCode}&status=eq.paid&select=id,client_name`, { headers: hdrs });
+        // 1. Single-Use Deduplication Check & Seconding Cascade Guard
+        let matchedOrder = null;
+        let isSecondingAction = false;
+        const dupRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?mpesa_code=eq.${mpesaCode}&status=eq.paid&select=id,client_name,internal_status,notes`, { headers: hdrs });
         const existingPaid = await dupRes.json();
         if (Array.isArray(existingPaid) && existingPaid.length > 0) {
-          addTrace("STEP 3 (DEDUP CHECK)", `Code ${mpesaCode} was ALREADY used to settle Order ${existingPaid[0].id} (${existingPaid[0].client_name})`);
-          const out = {
-            success: true,
-            duplicate: true,
-            mpesa_code: mpesaCode,
-            settled_order_id: existingPaid[0].id,
-            client_name: existingPaid[0].client_name,
-            trace: traceSteps
-          };
-          await flushTraceLog(out);
-          res.writeHead(200);
-          return res.end(JSON.stringify(out));
-        }
-        addTrace("STEP 3 (DEDUP CHECK)", `Code ${mpesaCode} is fresh (unused in Supabase)`);
+          const paidOrder = existingPaid[0];
+          const isProvisional =
+            paidOrder.internal_status === "PROVISIONALLY_CLEARED" ||
+            (paidOrder.notes && /PROVISIONAL/i.test(paidOrder.notes)) ||
+            paidOrder.internal_status !== "FULLY_SECONDED";
 
-        // 2. Find Pending Orders Matching Exact Amount
-        const pendRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?status=eq.pending&total_price=eq.${amount}&order=created_at.desc&limit=10`, { headers: hdrs });
-        let candidates = await pendRes.json();
-        if (!Array.isArray(candidates)) candidates = [];
-        addTrace("STEP 4 (ORDER SEARCH)", `Found ${candidates.length} pending order(s) with total_price = KES ${amount}`);
+          if (!isProvisional) {
+            addTrace("STEP 3 (DEDUP CHECK)", `Code ${mpesaCode} was ALREADY used to settle Order ${existingPaid[0].id} (${existingPaid[0].client_name})`);
+            const out = {
+              success: true,
+              duplicate: true,
+              mpesa_code: mpesaCode,
+              settled_order_id: existingPaid[0].id,
+              client_name: existingPaid[0].client_name,
+              trace: traceSteps
+            };
+            await flushTraceLog(out);
+            res.writeHead(200);
+            return res.end(JSON.stringify(out));
+          }
+
+          matchedOrder = paidOrder;
+          isSecondingAction = true;
+          addTrace("STEP 3 (SECONDING CASCADE)", `Provisional Order #${matchedOrder.id.slice(0, 8).toUpperCase()} recognized for seconding via Till SMS`);
+        } else {
+          addTrace("STEP 3 (DEDUP CHECK)", `Code ${mpesaCode} is fresh (unused in Supabase)`);
+        }
+
+        // 2. Find Pending Orders Matching Exact Amount (if not already matched via seconding)
+        let candidates = [];
+        if (!matchedOrder) {
+          const pendRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?status=eq.pending&total_price=eq.${amount}&order=created_at.desc&limit=10`, { headers: hdrs });
+          candidates = await pendRes.json();
+          if (!Array.isArray(candidates)) candidates = [];
+          addTrace("STEP 4 (ORDER SEARCH)", `Found ${candidates.length} pending order(s) with total_price = KES ${amount}`);
+        }
 
         // Hardened 3-Tier Identity + Time-Window Matching (Prevents matching stale/abandoned orders from wrong customers)
-        let matchedOrder = null;
         const windowMinutes = Number(process.env.TILL_MATCH_WINDOW_MINUTES) || 15;
         const windowMs = windowMinutes * 60 * 1000;
         const nowMs = Date.now();
@@ -273,7 +290,7 @@ export async function handleTillFinanceRoutes({
           ? payerName.toLowerCase().split(/\s+/).filter(t => t.length >= 3)
           : [];
 
-        if (candidates.length > 0) {
+        if (!matchedOrder && candidates.length > 0) {
           // Tier 1: Exact Amount + Phone Suffix Match (100% Identity Guarantee)
           if (payerSuffix.length === 9) {
             matchedOrder = candidates.find(o => (o.client_phone || "").replace(/\D/g, "").endsWith(payerSuffix)) || null;
@@ -373,23 +390,27 @@ export async function handleTillFinanceRoutes({
           return res.end(JSON.stringify(out));
         }
 
-        // 3. Auto-Settle Matched Order in Supabase (<200ms)
+        // 3. Auto-Settle or Second Matched Order in Supabase (<200ms)
         const timeStr = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-        const updatedNotes = matchedOrder.notes
-          ? `${matchedOrder.notes}\n• [${timeStr} TILL-SIM]: Auto-settled (${mpesaCode} - ${payerName})`
+        const settlementTag = isSecondingAction
+          ? `• [${timeStr} TILL-SECONDED]: Seconded by official Till SMS (${mpesaCode} - ${payerName})`
           : `• [${timeStr} TILL-SIM]: Auto-settled (${mpesaCode} - ${payerName})`;
+        const updatedNotes = matchedOrder.notes
+          ? `${matchedOrder.notes}\n${settlementTag}`
+          : settlementTag;
 
+        const finalInternalStatus = isSecondingAction ? "FULLY_SECONDED" : "PAID";
         await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${matchedOrder.id}`, {
           method: "PATCH",
           headers: { ...hdrs, "Prefer": "return=minimal" },
           body: JSON.stringify({
             status: "paid",
-            internal_status: "PAID",
+            internal_status: finalInternalStatus,
             mpesa_code: mpesaCode,
             notes: updatedNotes
           })
         });
-        addTrace("STEP 6 (SUPABASE SETTLE)", `Patched Order ${matchedOrder.id} -> status='paid', mpesa_code='${mpesaCode}'`);
+        addTrace("STEP 6 (SUPABASE SETTLE)", `Patched Order ${matchedOrder.id} -> status='paid', internal_status='${finalInternalStatus}', mpesa_code='${mpesaCode}'`);
 
         const allShops = await getAllShops();
         const activeShop = allShops.find(s => s.id === matchedOrder.shop_id) || null;
@@ -398,36 +419,50 @@ export async function handleTillFinanceRoutes({
         if (safeSendMessage) {
           const opsJid = activeShop?.fulfillment_settings?.whatsapp_routing?.operations_jid || GROUPS?.general?.jid;
           const mgmtJid = activeShop?.fulfillment_settings?.whatsapp_routing?.management_jid || GROUPS?.adminOversight?.jid;
-          const card =
-            `💳 *[TILL SIM AUTO-SETTLED — ${(activeShop?.name || "STORE").toUpperCase()}]*\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `• *Order:* #${shortOrder} (${matchedOrder.client_name || payerName})\n` +
-            `• *M-Pesa Ref:* \`${mpesaCode}\` ✅\n` +
-            `• *Amount:* KES ${Number(amount).toLocaleString()}\n` +
-            `• *Till Payer:* ${payerName}${payerPhone ? ` (${payerPhone})` : ""}\n` +
-            (reportedBalance !== null ? `• *New Till Balance:* KES ${Number(reportedBalance).toLocaleString()}\n` : "") +
-            `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `⚡ *Next Step:* Reply \`!pack ${shortOrder}\` to box order.`;
+          const auditJid = GROUPS?.dailyRegisterAudit?.jid;
+          const card = isSecondingAction
+            ? `✅ *[ORDER FULLY SECONDED — TILL SMS VERIFIED]*\n` +
+              `━━━━━━━━━━━━━━━━━━━━━━\n` +
+              `• *Store:* ${(activeShop?.name || "STORE").toUpperCase()}\n` +
+              `• *Order:* #${shortOrder} (${matchedOrder.client_name || payerName})\n` +
+              `• *M-Pesa Ref:* \`${mpesaCode}\` (Verified via SMS) 🛡️\n` +
+              `• *Amount:* KES ${Number(amount).toLocaleString()}\n` +
+              `• *Till Payer:* ${payerName}${payerPhone ? ` (${payerPhone})` : ""}\n` +
+              (reportedBalance !== null ? `• *Till Balance:* KES ${Number(reportedBalance).toLocaleString()}\n` : "") +
+              `• *Ledger Status:* ${balanceVariance === 0 ? "🟢 BALANCED (Variance KES 0.00)" : `⚠️ VARIANCE (KES ${balanceVariance.toFixed(2)})`}\n` +
+              `━━━━━━━━━━━━━━━━━━━━━━\n` +
+              `_Zero Ghost Payments: Verified on physical Till statement._`
+            : `💳 *[TILL SIM AUTO-SETTLED — ${(activeShop?.name || "STORE").toUpperCase()}]*\n` +
+              `━━━━━━━━━━━━━━━━━━━━━━\n` +
+              `• *Order:* #${shortOrder} (${matchedOrder.client_name || payerName})\n` +
+              `• *M-Pesa Ref:* \`${mpesaCode}\` ✅\n` +
+              `• *Amount:* KES ${Number(amount).toLocaleString()}\n` +
+              `• *Till Payer:* ${payerName}${payerPhone ? ` (${payerPhone})` : ""}\n` +
+              (reportedBalance !== null ? `• *New Till Balance:* KES ${Number(reportedBalance).toLocaleString()}\n` : "") +
+              `━━━━━━━━━━━━━━━━━━━━━━\n` +
+              `⚡ *Next Step:* Reply \`!pack ${shortOrder}\` to box order.`;
 
-          const targets = new Set([opsJid, mgmtJid, GROUPS?.general?.jid].filter(Boolean));
+          const targets = new Set([opsJid, mgmtJid, auditJid, GROUPS?.general?.jid].filter(Boolean));
           for (const t of targets) {
             safeSendMessage(t, { text: card });
           }
-          addTrace("STEP 7 (WHATSAPP BROADCAST)", `Dispatched AUTO-SETTLED card for #${shortOrder} to ${targets.size} WhatsApp group(s)`);
+          addTrace("STEP 7 (WHATSAPP BROADCAST)", `Dispatched ${isSecondingAction ? "SECONDED" : "AUTO-SETTLED"} card for #${shortOrder} to ${targets.size} WhatsApp group(s)`);
           
-          // Instant Customer Confirmation to Personal WhatsApp
-          try {
-            const { sendCustomerOrderConfirmation } = await import("./customer_notifier.mjs");
-            sendCustomerOrderConfirmation(matchedOrder, safeSendMessage);
-            addTrace("STEP 7B (CUSTOMER WHATSAPP CONFIRMATION)", `Triggered instant confirmation to customer ${matchedOrder.client_phone}`);
-          } catch (custErr) {
-            console.warn("[CUSTOMER CONFIRMATION ERROR]", custErr.message);
+          // Instant Customer Confirmation to Personal WhatsApp (only if not already notified)
+          if (!isSecondingAction) {
+            try {
+              const { sendCustomerOrderConfirmation } = await import("./customer_notifier.mjs");
+              sendCustomerOrderConfirmation(matchedOrder, safeSendMessage);
+              addTrace("STEP 7B (CUSTOMER WHATSAPP CONFIRMATION)", `Triggered instant confirmation to customer ${matchedOrder.client_phone}`);
+            } catch (custErr) {
+              console.warn("[CUSTOMER CONFIRMATION ERROR]", custErr.message);
+            }
           }
         }
 
         const out = {
           success: true,
-          status: "PAID",
+          status: isSecondingAction ? "FULLY_SECONDED" : "PAID",
           direction: "INFLOW",
           order_id: matchedOrder.id,
           mpesa_code: mpesaCode,

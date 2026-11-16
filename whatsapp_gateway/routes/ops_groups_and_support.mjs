@@ -667,6 +667,19 @@ export async function handleOpsGroupsAndSupportRoutes({
       }
     }
 
+    // GET & POST /api/sentinel/ghost-check
+    if ((req.method === "GET" || req.method === "POST") && parsedUrl.pathname === "/api/sentinel/ghost-check") {
+      try {
+        const { scanForGhostPayments } = await import("../ghost_payment_sentinel.mjs");
+        const result = await scanForGhostPayments({ safeSendMessage });
+        res.writeHead(200);
+        return res.end(JSON.stringify({ success: true, ...result }));
+      } catch (err) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    }
+
     // GET /groups
     if (req.method === "GET" && parsedUrl.pathname === "/groups") {
       res.writeHead(200);

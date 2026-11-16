@@ -164,6 +164,12 @@ async function startWhatsAppBot() {
       } catch (scaleErr) {
         console.warn("[SCALING SENTINEL INIT WARN]", scaleErr.message);
       }
+      try {
+        const { startGhostPaymentSentinel } = await import("./ghost_payment_sentinel.mjs");
+        startGhostPaymentSentinel(safeSendMessage);
+      } catch (ghostErr) {
+        console.warn("[GHOST SENTINEL INIT WARN]", ghostErr.message);
+      }
     }
   });
 
