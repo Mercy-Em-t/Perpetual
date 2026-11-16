@@ -45,11 +45,38 @@ export function categorizeCounterparty(counterparty = "", rawText = "", txType =
 }
 
 /**
+ * Extracts true transaction timestamp from Safaricom M-Pesa SMS text (Africa/Nairobi UTC+3)
+ * Example: "on 16/11/26 at 3:15 PM" -> "2026-11-16T12:15:00.000Z"
+ */
+export function parseMpesaTimestamp(text, fallbackMs = Date.now()) {
+  if (!text) return new Date(fallbackMs).toISOString();
+  const m = text.match(/on\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+at\s+(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!m) return new Date(fallbackMs).toISOString();
+
+  let [_, day, month, year, hoursStr, minsStr, ampm] = m;
+  day = day.padStart(2, "0");
+  month = month.padStart(2, "0");
+  if (year.length === 2) year = "20" + year;
+
+  let hours = parseInt(hoursStr, 10);
+  const mins = minsStr.padStart(2, "0");
+  if (ampm.toUpperCase() === "PM" && hours < 12) hours += 12;
+  if (ampm.toUpperCase() === "AM" && hours === 12) hours = 0;
+  const formattedHours = String(hours).padStart(2, "0");
+
+  const eatIso = `${year}-${month}-${day}T${formattedHours}:${mins}:00+03:00`;
+  const parsed = new Date(eatIso);
+  return isNaN(parsed.getTime()) ? new Date(fallbackMs).toISOString() : parsed.toISOString();
+}
+
+/**
  * Parses an SMS from MPESA, DTB, Safaricom, or Okoa Jahazi into a structured financial record.
  */
 export function parseFinancialSms(rawText = "", sender = "MPESA", timestampMs = Date.now(), smsId = null) {
   const text = String(rawText || "").trim();
   if (!text) return null;
+
+  const timestamp = parseMpesaTimestamp(text, timestampMs);
 
   // Extract M-Pesa transaction cost if present
   const feeMatch = text.match(/Transaction\s+cost,?\s*(?:Ksh\.?|KES\.?)\s*([0-9,]+(?:\.[0-9]{2})?)/i) ||
@@ -85,7 +112,7 @@ export function parseFinancialSms(rawText = "", sender = "MPESA", timestampMs = 
         phone: partyMatch?.[1]?.trim() || null,
         category: "🏪 Business Till Inflow",
         till_balance: tillBalance,
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp,
         raw_sms: text,
         sms_id: smsId
       };
@@ -109,7 +136,7 @@ export function parseFinancialSms(rawText = "", sender = "MPESA", timestampMs = 
         phone: phoneInDest ? phoneInDest[1] : null,
         category: "📤 Business Till Outflow / Withdrawal",
         till_balance: tillBalance,
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp,
         raw_sms: text,
         sms_id: smsId
       };
@@ -133,7 +160,7 @@ export function parseFinancialSms(rawText = "", sender = "MPESA", timestampMs = 
       counterparty,
       category: categorizeCounterparty(counterparty, text, "PAID_TO_MERCHANT"),
       mpesa_balance: mpesaBalance,
-      timestamp: new Date(timestampMs).toISOString(),
+      timestamp,
       raw_sms: text,
       sms_id: smsId
     };
@@ -162,7 +189,7 @@ export function parseFinancialSms(rawText = "", sender = "MPESA", timestampMs = 
       counterparty,
       category: categorizeCounterparty(counterparty, text, txType),
       mpesa_balance: mpesaBalance,
-      timestamp: new Date(timestampMs).toISOString(),
+      timestamp,
       raw_sms: text,
       sms_id: smsId
     };
@@ -184,7 +211,7 @@ export function parseFinancialSms(rawText = "", sender = "MPESA", timestampMs = 
       counterparty,
       category: "🏧 Cash Withdrawals",
       mpesa_balance: mpesaBalance,
-      timestamp: new Date(timestampMs).toISOString(),
+      timestamp,
       raw_sms: text,
       sms_id: smsId
     };
@@ -206,7 +233,7 @@ export function parseFinancialSms(rawText = "", sender = "MPESA", timestampMs = 
       counterparty,
       category: "💰 Personal Income & Transfers In",
       mpesa_balance: mpesaBalance,
-      timestamp: new Date(timestampMs).toISOString(),
+      timestamp,
       raw_sms: text,
       sms_id: smsId
     };
@@ -228,7 +255,7 @@ export function parseFinancialSms(rawText = "", sender = "MPESA", timestampMs = 
         fee,
         counterparty: `${counterparty} (via DTB)`,
         category: categorizeCounterparty(counterparty, text, "BANK_TRANSFER"),
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp,
         raw_sms: text,
         sms_id: smsId
       };
@@ -249,7 +276,7 @@ export function parseFinancialSms(rawText = "", sender = "MPESA", timestampMs = 
       fee: 0,
       counterparty: `Safaricom Data (${bundleDesc})`,
       category: "📶 Airtime, Data & Okoa",
-      timestamp: new Date(timestampMs).toISOString(),
+      timestamp,
       raw_sms: text,
       sms_id: smsId
     };
@@ -271,7 +298,7 @@ export function parseFinancialSms(rawText = "", sender = "MPESA", timestampMs = 
         counterparty: "Safaricom Okoa Chap Chap Call",
         category: "📶 Airtime, Data & Okoa",
         okoa_debt: okoaDebt,
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp,
         raw_sms: text,
         sms_id: smsId
       };
@@ -289,7 +316,7 @@ export function parseFinancialSms(rawText = "", sender = "MPESA", timestampMs = 
         counterparty: `Okoa Jahazi Advance (+Fee KES ${loanFee})`,
         category: "📶 Airtime, Data & Okoa",
         okoa_debt: okoaDebt,
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp,
         raw_sms: text,
         sms_id: smsId
       };

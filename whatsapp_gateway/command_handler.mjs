@@ -26,7 +26,7 @@ import {
   listShopProducts,
   getAllShops
 } from "./tenant_resolver.mjs";
-import { formatPhoneToWhatsAppJid } from "./eod_reconciler.mjs";
+import { formatPhoneToWhatsAppJid, getEatDateBoundaries } from "./eod_reconciler.mjs";
 
 export const KNOWN_COMMANDS = [
   "help", "status", "health", "orders", "order", "details",
@@ -386,11 +386,11 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
   if (command === "!status" || command === "!health") {
     try {
       const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const { startOfDayUtc, endOfDayUtc } = getEatDateBoundaries(now);
 
       const [inFlightRes, todayRes] = await Promise.all([
         fetch(`${SUPABASE_URL}/rest/v1/orders?shop_id=eq.${shop.id}&status=neq.dispatched&status=neq.cancelled&status=neq.archived&select=id,status`, { headers: dbHdrs }),
-        fetch(`${SUPABASE_URL}/rest/v1/orders?shop_id=eq.${shop.id}&created_at=gte.${startOfDay}&select=id,total_price,status`, { headers: dbHdrs })
+        fetch(`${SUPABASE_URL}/rest/v1/orders?shop_id=eq.${shop.id}&created_at=gte.${startOfDayUtc}&created_at=lte.${endOfDayUtc}&select=id,total_price,status`, { headers: dbHdrs })
       ]);
 
       const inFlight = await inFlightRes.json();
@@ -1504,8 +1504,8 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
       const boundMgmt = shops.filter(s => s.fulfillment_settings?.whatsapp_routing?.management_jid).length;
 
       const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?created_at=gte.${startOfDay}&select=id,total_price,status`, { headers: dbHdrs });
+      const { startOfDayUtc, endOfDayUtc } = getEatDateBoundaries(now);
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?created_at=gte.${startOfDayUtc}&created_at=lte.${endOfDayUtc}&select=id,total_price,status`, { headers: dbHdrs });
       const todayOrders = (await res.json()) || [];
 
       let todayGMV = 0;
@@ -1572,8 +1572,8 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
 
     try {
       const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?created_at=gte.${startOfDay}&select=id,total_price,status,shop_id`, { headers: dbHdrs });
+      const { startOfDayUtc, endOfDayUtc } = getEatDateBoundaries(now);
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?created_at=gte.${startOfDayUtc}&created_at=lte.${endOfDayUtc}&select=id,total_price,status,shop_id`, { headers: dbHdrs });
       const orders = await res.json();
 
       let totalGross = 0;

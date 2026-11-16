@@ -4,6 +4,7 @@
  * ambiguity disambiguation guards, and structured template validation.
  */
 import { GROUPS, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "./config.mjs";
+import { getEatDateBoundaries } from "./eod_reconciler.mjs";
 
 const hdrs = {
   "apikey": SUPABASE_SERVICE_ROLE_KEY,
@@ -169,14 +170,15 @@ export async function calculateShopSummary(shopId, timeframe = "today") {
   let timeFilter = "";
 
   if (timeframe === "today") {
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    timeFilter = `&created_at=gte.${startOfDay}`;
+    const { startOfDayUtc, endOfDayUtc } = getEatDateBoundaries(now);
+    timeFilter = `&created_at=gte.${startOfDayUtc}&created_at=lte.${endOfDayUtc}`;
   } else if (timeframe === "week") {
     const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
     timeFilter = `&created_at=gte.${startOfWeek}`;
   } else if (timeframe === "month") {
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    timeFilter = `&created_at=gte.${startOfMonth}`;
+    const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Africa/Nairobi" });
+    const startOfMonthUtc = new Date(`${dateStr.slice(0, 7)}-01T00:00:00+03:00`).toISOString();
+    timeFilter = `&created_at=gte.${startOfMonthUtc}`;
   }
 
   const url = `${SUPABASE_URL}/rest/v1/orders?shop_id=eq.${shopId}${timeFilter}&select=id,total_price,status,created_at`;
