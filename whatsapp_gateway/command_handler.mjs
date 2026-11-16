@@ -254,11 +254,51 @@ async function handleShopBindCommand(args, replyJid, senderId, callerName, safeS
 }
 
 // =============================================================================
+// SENDER AUTHORITY GUARD: VERIFY OFFICIAL SHOP OPERATOR / MANAGEMENT
+// =============================================================================
+function isAuthorizedShopOperator(senderId, shop) {
+  if (!senderId) return false;
+  const cleanSender = String(senderId).replace(/@.*$/, "").replace(/[^0-9]/g, "");
+  if (!cleanSender) return false;
+
+  // 1. Platform Superadmins
+  const platformAdmins = [
+    "254710720949",
+    (process.env.WHATSAPP_OWNER_PHONE || "").replace(/[^0-9]/g, "")
+  ].filter(Boolean);
+
+  if (platformAdmins.some(admin => cleanSender.endsWith(admin.slice(-9)))) {
+    return true;
+  }
+
+  // 2. Shop Owner phone
+  const routing = shop?.fulfillment_settings?.whatsapp_routing || {};
+  const ownerPhone = (routing.owner_phone || shop?.phone || shop?.whatsapp_number || "").replace(/[^0-9]/g, "");
+  if (ownerPhone && cleanSender.endsWith(ownerPhone.slice(-9))) {
+    return true;
+  }
+
+  // 3. Shop Authorized Staff / Managers list
+  const staffList = [
+    ...(Array.isArray(routing.staff_phones) ? routing.staff_phones : []),
+    ...(Array.isArray(routing.authorized_managers) ? routing.authorized_managers : []),
+    ...(Array.isArray(shop?.appearance_config?.staff_phones) ? shop.appearance_config.staff_phones : [])
+  ].map(p => String(p).replace(/[^0-9]/g, "")).filter(Boolean);
+
+  if (staffList.some(staff => cleanSender.endsWith(staff.slice(-9)))) {
+    return true;
+  }
+
+  return false;
+}
+
+// =============================================================================
 // TIER 1: SHOP / TENANT COMMAND HANDLER (Strictly Isolated to Shop ID)
 // =============================================================================
 async function handleShopCommand(command, args, replyJid, senderId, callerName, context, safeSendMessage) {
   const shop = context.shop;
   const isMgmt = context.role === "MANAGEMENT";
+  const isOperator = isAuthorizedShopOperator(senderId, shop);
 
   // Platform-only commands not applicable to shop groups
   const platformOnlyCommands = ["shops", "stores", "bind", "ticket", "tickets", "claim", "resolve", "sentinel"];
@@ -266,6 +306,23 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
   if (platformOnlyCommands.includes(bareCommand)) {
     await safeSendMessage(replyJid, {
       text: `⚠️ *Command Not Applicable*\n\`${command}\` is reserved for platform administration channels.\nReply with *!help* to view shop commands.`
+    });
+    return;
+  }
+
+  // SENDER ROLE GUARDRAIL:
+  // Restrict order lifecycle mutations (!paid, !pack, !verify, !dispatch, !delivered, !confirm, !cancel, !reject)
+  const mutationCommands = [
+    "!paid", "!clear", "!pair",
+    "!pack", "!verify", "!dispatch", "!delivered", "!confirm",
+    "!cancel", "!reject",
+    "!resurrect", "!revive"
+  ];
+
+  if (mutationCommands.includes(command) && !isOperator) {
+    console.warn(`🚨 [UNAUTHORIZED SHOP MUTATION BLOCKED] Sender: ${senderId} attempted ${command} for ${shop.name}`);
+    await safeSendMessage(replyJid, {
+      text: `🔒 *Access Denied:* You (@${callerName}) are not registered as an official manager or staff member for *${shop.name}*.\n\nOnly authorized shop management accounts can advance or complete orders.`
     });
     return;
   }

@@ -86,9 +86,9 @@ Autonomous financial reconciliation & order ledger matrix.
 • !cancel <id> [reason] — Abort/cancel order & notify customer
 
 🔗 MANAGEMENT LINKS:
-• Dashboard: https://tmsavannah.com/dashboard
-• Order Manager: https://tmsavannah.com/order-manager
-• Public Store: https://tmsavannah.com/s/creative-galore
+• Dashboard: https://shop.tmsavannah.com/dashboard
+• Order Manager: https://shop.tmsavannah.com/order-manager
+• Public Store: https://shop.tmsavannah.com/s/creative-galore
 • Till Receipts API: http://100.73.175.118:8085/api/till/ledger
 
 🔐 Security: Zero group pollution. All customer interactions are private 1-on-1.`;
@@ -533,7 +533,15 @@ async function processCustomerDirectMessage(from, text, msg) {
     }
   }
 
-  // E. Customer greeting / inquiry: send store catalog & welcome card
+  // E. Customer greeting / inquiry: send store catalog & welcome card ONLY when explicitly requested
+  // GUARDRAIL: Do not intercept personal/casual 1-on-1 WhatsApp conversations!
+  const isExplicitShopTrigger = /^(?:!|#)?(?:menu|catalog|shop|products|order|items|help|hi shop|hello shop)\b/i.test(trimmed);
+  if (!isExplicitShopTrigger) {
+    // Silently ignore casual human messages (e.g. personal chat, banter, school updates)
+    console.log(`💬 [CASUAL DM PASSTHROUGH] Chat: ${from} | Text: "${trimmed.substring(0, 30)}"`);
+    return;
+  }
+
   const welcomeMsg = [
     `🌸 *WELCOME TO CREATIVE GALORE!* 🌸`,
     `=============================================================`,
@@ -552,7 +560,7 @@ async function processCustomerDirectMessage(from, text, msg) {
     `👉 *How to Order on WhatsApp:*`,
     `Reply with the product number (e.g. *1* or *buy 6*) to initiate checkout!`,
     "",
-    `🌐 *Or Browse Photos on Web:* https://tmsavannah.com/s/creative-galore`,
+    `🌐 *Or Browse Photos on Web:* https://shop.tmsavannah.com/s/creative-galore`,
     "",
     `💳 *Till Number:* *5758419* (Creative Galore)`
   ].join("\n");
@@ -568,6 +576,30 @@ async function processInChatCommand(from, text, msg) {
   const arg2 = parts[2] || "";
 
   console.log(`⚡ [FIFO COMMAND] chat: ${from} | cmd: ${cmd} | args: [${arg1}, ${arg2}]`);
+
+  // SENDER AUTHORITY GUARD:
+  // Verify that sender is an authorized store manager or platform admin before allowing order mutations
+  const cleanSender = (msg?.key?.participant || (msg?.key?.fromMe ? connectedUserJid : from) || "").replace(/@.*$/, "").replace(/[^0-9]/g, "");
+  const authorizedManagementNumbers = [
+    "254710720949",
+    (DEFAULT_RECIPIENT || "").replace(/[^0-9]/g, ""),
+    (connectedUserJid || "").replace(/[^0-9]/g, "")
+  ].filter(Boolean);
+
+  const isSenderAuthorized = msg?.key?.fromMe || authorizedManagementNumbers.some(num => cleanSender.endsWith(num.slice(-9)));
+
+  const managementOnlyCommands = [
+    "!pickup", "!ready", "!pair", "!cancel", "!abort", "!unpair", 
+    "!reassign", "!refund", "!dispute", "!refund-initiate", "!settle", "!ingest"
+  ];
+
+  if (managementOnlyCommands.includes(cmd) && !isSenderAuthorized) {
+    console.warn(`🚨 [UNAUTHORIZED COMMAND BLOCKED] Sender: ${cleanSender} attempted ${cmd} in ${from}`);
+    await sock.sendMessage(from, {
+      text: `🔒 *Access Denied:* Only registered store management members are authorized to execute \`${cmd}\`.`
+    });
+    return;
+  }
 
   // 1. Command: !help
   if (cmd === "!help" || cmd === "!commands") {
