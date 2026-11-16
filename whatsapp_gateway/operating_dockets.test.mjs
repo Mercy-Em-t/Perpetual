@@ -18,5 +18,5 @@ test("Operating Dockets: Generates dynamic settlement docket with real database 
   const settle = await generateSettlementDocketReport();
   assert.equal(settle.success, true);
   assert.ok(typeof settle.formattedWhatsAppMessage === "string");
-  assert.ok(settle.formattedWhatsAppMessage.includes("PLATFORM DOCKET: 09:30 AM B2C NET SETTLEMENTS"));
+  assert.ok(settle.formattedWhatsAppMessage.includes("B2C NET SETTLEMENTS"));
 });

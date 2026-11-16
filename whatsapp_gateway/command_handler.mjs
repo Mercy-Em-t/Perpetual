@@ -34,7 +34,10 @@ import {
 } from "./merchant_infraction_sentinel.mjs";
 import {
   generateMorningDocketReport,
-  generateSettlementDocketReport
+  generateSettlementDocketReport,
+  generateLunchRushDocketReport,
+  generateWeeklyTuesdayDocketReport,
+  generateMonthlyDocketReport
 } from "./operating_dockets.mjs";
 
 export const KNOWN_COMMANDS = [
@@ -2030,27 +2033,37 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
     }
   }
 
-  // 8. Automated Operating Cadence Action Dockets: !docket [morning|settle]
+  // 8. Automated Operating Cadence Action Dockets: !docket [morning|settle|lunch|weekly|monthly]
   if (command === "!docket" || command === "!dockets") {
     const subType = (args || "").trim().toLowerCase();
-    if (subType === "settle" || subType === "settlement" || subType === "payout") {
-      try {
+    try {
+      if (subType === "settle" || subType === "settlement" || subType === "payout") {
         const docket = await generateSettlementDocketReport();
         await safeSendMessage(replyJid, { text: docket.formattedWhatsAppMessage });
         return;
-      } catch (err) {
-        await safeSendMessage(replyJid, { text: `❌ Settlement docket generation error: ${err.message}` });
+      }
+      if (subType === "lunch" || subType === "rush") {
+        const docket = await generateLunchRushDocketReport();
+        await safeSendMessage(replyJid, { text: docket.formattedWhatsAppMessage });
         return;
       }
-    }
+      if (subType === "weekly" || subType === "tuesday") {
+        const docket = await generateWeeklyTuesdayDocketReport();
+        await safeSendMessage(replyJid, { text: docket.formattedWhatsAppMessage });
+        return;
+      }
+      if (subType === "monthly" || subType === "first") {
+        const docket = await generateMonthlyDocketReport();
+        await safeSendMessage(replyJid, { text: docket.formattedWhatsAppMessage });
+        return;
+      }
 
-    // Default to morning overnight docket
-    try {
+      // Default: morning overnight docket
       const docket = await generateMorningDocketReport();
       await safeSendMessage(replyJid, { text: docket.formattedWhatsAppMessage });
       return;
     } catch (err) {
-      await safeSendMessage(replyJid, { text: `❌ Morning docket generation error: ${err.message}` });
+      await safeSendMessage(replyJid, { text: `❌ Docket generation error: ${err.message}` });
       return;
     }
   }

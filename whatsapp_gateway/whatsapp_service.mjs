@@ -170,6 +170,12 @@ async function startWhatsAppBot() {
       } catch (ghostErr) {
         console.warn("[GHOST SENTINEL INIT WARN]", ghostErr.message);
       }
+      try {
+        const { startPlatformCadenceDaemon } = await import("./platform_cadence_daemon.mjs");
+        startPlatformCadenceDaemon(safeSendMessage);
+      } catch (cadenceErr) {
+        console.warn("[CADENCE DAEMON INIT WARN]", cadenceErr.message);
+      }
     }
   });
 
