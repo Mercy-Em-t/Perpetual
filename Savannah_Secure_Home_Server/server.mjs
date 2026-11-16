@@ -328,15 +328,20 @@ async function startWhatsAppBot() {
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
     for (const msg of messages) {
-      if (!msg.message || msg.key.fromMe) continue;
+      if (!msg.message) continue;
 
       const from = msg.key.remoteJid;
       const body = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
       const text = body.trim();
+      if (!text) continue;
+
+      // Allow owner's own '!' commands (e.g. !help in groups), but ignore owner's casual messages and bot's own replies
+      if (msg.key.fromMe && !text.startsWith("!")) continue;
+
       trafficCounters.inboundMessages++;
       recordObservatoryLog("WHATSAPP_IN", `Inbound WhatsApp from ${from}: "${text.substring(0, 40)}${text.length > 40 ? "..." : ""}"`);
 
-      // If command starting with !, process command
+      // If command starting with !, process command (in groups or DMs)
       if (text.startsWith("!")) {
         enqueueChatTask(from, async () => {
           await processInChatCommand(from, text, msg);
@@ -368,6 +373,9 @@ const CG_CATALOG = [
   { id: 8, name: "The Creative Galore 'Yarn Tasting' Experience Palette Card", price: 650, uuid: "3952ae6e-42ac-43ce-8b20-0c4775581336" }
 ];
 
+const WELCOME_COOLDOWN_MS = 12 * 60 * 60 * 1000; // 12 hours per chat
+const welcomeCooldownMap = new Map();
+
 // -----------------------------------------------------------------------------
 // CUSTOMER DIRECT CONVERSATION & 1-ON-1 TILL SHOPPING ASSISTANT
 // -----------------------------------------------------------------------------
@@ -375,7 +383,10 @@ async function processCustomerDirectMessage(from, text, msg) {
   const cleanPhone = from.replace(/@.*$/, "").replace(/[^0-9]/g, "");
   const trimmed = (text || "").trim();
   const lower = trimmed.toLowerCase();
-  const mpesaMatch = trimmed.match(/\b([A-Z0-9]{10})\b/i);
+  // Strict M-Pesa code match: 10 uppercase alphanumeric chars containing BOTH letters and digits (never plain English words)
+  const mpesaMatch =
+    trimmed.match(/\b([A-Z0-9]{10})\b(?=\s+Confirmed)/i) ||
+    trimmed.match(/\b(?=[A-Z0-9]{10}\b)(?=.*\d)(?=.*[A-Z])[A-Z0-9]{10}\b/);
 
   // A. Check for M-Pesa transaction code or forwarded confirmation SMS
   if (mpesaMatch) {
@@ -533,14 +544,21 @@ async function processCustomerDirectMessage(from, text, msg) {
     }
   }
 
-  // E. Customer greeting / inquiry: send store catalog & welcome card ONLY when explicitly requested
-  // GUARDRAIL: Do not intercept personal/casual 1-on-1 WhatsApp conversations!
-  const isExplicitShopTrigger = /^(?:!|#)?(?:menu|catalog|shop|products|order|items|help|hi shop|hello shop)\b/i.test(trimmed);
+  // E. Customer greeting / inquiry: send store catalog & welcome card ONLY when explicitly requested, with 12h per-chat cooldown
+  // GUARDRAIL: Do not intercept personal/casual 1-on-1 WhatsApp conversations or resend repeatedly!
+  const isExplicitShopTrigger = /^(?:!|#)?(?:menu|catalog|shop|products|items|hi shop|hello shop)\s*$/i.test(trimmed);
   if (!isExplicitShopTrigger) {
     // Silently ignore casual human messages (e.g. personal chat, banter, school updates)
     console.log(`💬 [CASUAL DM PASSTHROUGH] Chat: ${from} | Text: "${trimmed.substring(0, 30)}"`);
     return;
   }
+
+  const lastWelcomeAt = welcomeCooldownMap.get(from) || 0;
+  if (Date.now() - lastWelcomeAt < WELCOME_COOLDOWN_MS && !trimmed.startsWith("!") && !trimmed.startsWith("#")) {
+    console.log(`⏳ [WELCOME COOLDOWN] Skipping duplicate welcome card for ${from}`);
+    return;
+  }
+  welcomeCooldownMap.set(from, Date.now());
 
   const welcomeMsg = [
     `🌸 *WELCOME TO CREATIVE GALORE!* 🌸`,
@@ -853,7 +871,7 @@ async function processInChatCommand(from, text, msg) {
 
     const order = activeOrders.get(cleanId);
     if (!order) {
-      await sock.sendMessage(from, { text: `⚠️ Order *#${cleanId}* not found in memory.\nCheck spelling or view live dashboard at https://tmsavannah.com/dashboard` });
+      await sock.sendMessage(from, { text: `⚠️ Order *#${cleanId}* not found in memory.\nCheck spelling or view live dashboard at https://shop.tmsavannah.com/dashboard` });
       return;
     }
 
@@ -2009,7 +2027,7 @@ app.post("/orders/new", async (req, res) => {
   return res.json({
     success: true,
     order_id: orderId,
-    tracking_url: `https://tmsavannah.com/track/${orderId}`,
+    tracking_url: `https://shop.tmsavannah.com/track/${orderId}`,
     message: "Order registered on Savannah Edge Node"
   });
 });
