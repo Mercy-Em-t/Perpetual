@@ -13,13 +13,13 @@ import { createClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { GROUPS } from "./config.mjs";
+import { GROUPS, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "./config.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load environment variables from tms-whitelabel-core or local .env
-let envUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-let envKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+let envUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || SUPABASE_URL;
+let envKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY;
 
 if (!envUrl || !envKey) {
   try {
