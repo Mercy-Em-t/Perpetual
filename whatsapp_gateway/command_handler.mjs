@@ -27,6 +27,11 @@ import {
   getAllShops
 } from "./tenant_resolver.mjs";
 import { formatPhoneToWhatsAppJid, getEatDateBoundaries } from "./eod_reconciler.mjs";
+import {
+  runMerchantInfractionAudit,
+  suspendShopCatalog,
+  reinstateShopCatalog
+} from "./merchant_infraction_sentinel.mjs";
 
 export const KNOWN_COMMANDS = [
   "help", "status", "health", "orders", "order", "details",
@@ -39,7 +44,8 @@ export const KNOWN_COMMANDS = [
   "shop", "shops", "stores", "bind",
   "pool", "tier", "approve-order", "decline-order",
   "ticket", "tickets", "claim", "resolve", "sentinel",
-  "voucher", "vouchers", "refund"
+  "voucher", "vouchers", "refund",
+  "infractions", "infraction", "suspend", "reinstate"
 ];
 
 const dbHdrs = {
@@ -908,6 +914,21 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
     return await handleVoucherIssuanceCommand(args, replyJid, senderId, callerName, safeSendMessage, shop, isMgmt);
   }
 
+  // 13. Merchant SLA Infraction Self-Audit
+  if (command === "!infractions" || command === "!infraction") {
+    const auditRes = await runMerchantInfractionAudit({
+      targetShopSlug: shop.slug,
+      auditAllTime: false,
+      actorName: callerName || shop.name
+    });
+    if (!auditRes.success) {
+      await safeSendMessage(replyJid, { text: `❌ ${auditRes.error}` });
+      return;
+    }
+    await safeSendMessage(replyJid, { text: auditRes.formattedWhatsAppMessage });
+    return;
+  }
+
   // Fallback
   await safeSendMessage(replyJid, {
     text: `❓ *Unknown command for ${shop.name}:* \`${command}\`\nType *!help* to view available commands.`
@@ -1488,6 +1509,9 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
       `• *!summary* — Platform-wide gross merchandise value & order volume\n` +
       `• *!summary <shop_slug>* — Drill down into a specific store's financial pulse\n` +
       `• *!shop bind <shop_slug> [ops|mgmt]* — Link a WhatsApp group to any shop\n` +
+      `• *!infractions [all|<slug>]* — Audit merchant SLA breaches & unfulfilled orders\n` +
+      `• *!suspend <shop_slug> [reason]* — Temporary catalog suspension under review\n` +
+      `• *!reinstate <shop_slug> [reason]* — Re-activate store catalog for public orders\n` +
       `• *!status* / *!health* — Live platform vitals, gateway uptime & in-flight queues\n` +
       `• *!ticket <desc>* — Log an incident alert to Perpetua IT Helpdesk\n` +
       `• *!resolve <id> [notes]* — Close an incident ticket\n\n` +
@@ -1941,6 +1965,63 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
     const shops = await getAllShops();
     const shop = shops.find(s => s.id === o.shop_id) || { id: o.shop_id, name: "Platform Store", fulfillment_settings: {} };
     return await handleShopCommand(command, args, replyJid, senderId, callerName, { tier: "SHOP", role: "MANAGEMENT", shop }, safeSendMessage);
+  }
+
+  // 7. Merchant SLA Governance & Infraction Sentinel
+  if (command === "!infractions" || command === "!infraction") {
+    const target = (args || "").trim();
+    const isAll = target.toLowerCase() === "all" || !target;
+    const auditRes = await runMerchantInfractionAudit({
+      auditAllTime: target.toLowerCase() === "all",
+      targetShopSlug: (target && target.toLowerCase() !== "all") ? target : null,
+      actorName: callerName || "ExecutiveOversight"
+    });
+    if (!auditRes.success) {
+      await safeSendMessage(replyJid, { text: `❌ ${auditRes.error}` });
+      return;
+    }
+    await safeSendMessage(replyJid, { text: auditRes.formattedWhatsAppMessage });
+    return;
+  }
+
+  if (command === "!suspend") {
+    const parts = (args || "").trim().split(/\s+/);
+    const shopSlug = parts[0];
+    const reason = parts.slice(1).join(" ") || "Quality SLA Infraction Review";
+    if (!shopSlug) {
+      await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!suspend <shop_slug> [reason]\`` });
+      return;
+    }
+    try {
+      const res = await suspendShopCatalog(shopSlug, reason, callerName || "ExecutiveOversight");
+      await safeSendMessage(replyJid, {
+        text: `🛑 *[MERCHANT CATALOG SUSPENDED]*\n• Store: *${res.shopName}* (\`${res.shopSlug}\`)\n• Status: *INACTIVE* 🔴\n• Reason: _${reason}_\n• Action: Storefront hidden under quality review.\n_To reinstate:_ \`!reinstate ${res.shopSlug} <reason>\``
+      });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Failed to suspend shop: ${err.message}` });
+      return;
+    }
+  }
+
+  if (command === "!reinstate") {
+    const parts = (args || "").trim().split(/\s+/);
+    const shopSlug = parts[0];
+    const reason = parts.slice(1).join(" ") || "Management review approved";
+    if (!shopSlug) {
+      await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`!reinstate <shop_slug> [reason]\`` });
+      return;
+    }
+    try {
+      const res = await reinstateShopCatalog(shopSlug, reason, callerName || "ExecutiveOversight");
+      await safeSendMessage(replyJid, {
+        text: `🟢 *[MERCHANT CATALOG REINSTATED]*\n• Store: *${res.shopName}* (\`${res.shopSlug}\`)\n• Status: *ACTIVE* 🟢\n• Reason: _${reason}_\n• Catalog is now live for orders.`
+      });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Failed to reinstate shop: ${err.message}` });
+      return;
+    }
   }
 
   // Unknown
