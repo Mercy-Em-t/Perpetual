@@ -32,6 +32,10 @@ import {
   suspendShopCatalog,
   reinstateShopCatalog
 } from "./merchant_infraction_sentinel.mjs";
+import {
+  generateMorningDocketReport,
+  generateSettlementDocketReport
+} from "./operating_dockets.mjs";
 
 export const KNOWN_COMMANDS = [
   "help", "status", "health", "orders", "order", "details",
@@ -45,7 +49,8 @@ export const KNOWN_COMMANDS = [
   "pool", "tier", "approve-order", "decline-order",
   "ticket", "tickets", "claim", "resolve", "sentinel",
   "voucher", "vouchers", "refund",
-  "infractions", "infraction", "suspend", "reinstate"
+  "infractions", "infraction", "suspend", "reinstate",
+  "docket", "dockets"
 ];
 
 const dbHdrs = {
@@ -1510,6 +1515,7 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
       `• *!summary <shop_slug>* — Drill down into a specific store's financial pulse\n` +
       `• *!shop bind <shop_slug> [ops|mgmt]* — Link a WhatsApp group to any shop\n` +
       `• *!infractions [all|<slug>]* — Audit merchant SLA breaches & unfulfilled orders\n` +
+      `• *!docket [morning|settle]* — On-demand 06:30 AM / 09:30 AM manager action dockets\n` +
       `• *!suspend <shop_slug> [reason]* — Temporary catalog suspension under review\n` +
       `• *!reinstate <shop_slug> [reason]* — Re-activate store catalog for public orders\n` +
       `• *!status* / *!health* — Live platform vitals, gateway uptime & in-flight queues\n` +
@@ -2020,6 +2026,31 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Failed to reinstate shop: ${err.message}` });
+      return;
+    }
+  }
+
+  // 8. Automated Operating Cadence Action Dockets: !docket [morning|settle]
+  if (command === "!docket" || command === "!dockets") {
+    const subType = (args || "").trim().toLowerCase();
+    if (subType === "settle" || subType === "settlement" || subType === "payout") {
+      try {
+        const docket = await generateSettlementDocketReport();
+        await safeSendMessage(replyJid, { text: docket.formattedWhatsAppMessage });
+        return;
+      } catch (err) {
+        await safeSendMessage(replyJid, { text: `❌ Settlement docket generation error: ${err.message}` });
+        return;
+      }
+    }
+
+    // Default to morning overnight docket
+    try {
+      const docket = await generateMorningDocketReport();
+      await safeSendMessage(replyJid, { text: docket.formattedWhatsAppMessage });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Morning docket generation error: ${err.message}` });
       return;
     }
   }
