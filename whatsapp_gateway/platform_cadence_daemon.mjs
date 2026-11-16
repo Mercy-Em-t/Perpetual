@@ -15,7 +15,7 @@
  * Idempotency Protection: Guarantees each docket dispatches at most once per calendar day.
  */
 
-import { GROUPS } from "./config.mjs";
+import { GROUPS, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "./config.mjs";
 import {
   generateMorningDocketReport,
   generateSettlementDocketReport,
@@ -69,6 +69,48 @@ export function getEatTimeComponents(date = new Date()) {
   };
 }
 
+const alertedStalledOrders = new Set();
+
+/**
+ * Checks for orders that have sat in PAID state for >15 minutes without moving to PREPARING
+ */
+async function checkStalledKitchenOrders(safeSendMessage, targetJid) {
+  if (!safeSendMessage || !targetJid) return;
+  try {
+    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const hdrs = {
+      "apikey": SUPABASE_SERVICE_ROLE_KEY,
+      "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json"
+    };
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?status=eq.paid&created_at=lte.${fifteenMinsAgo}&select=id,shop_id,total_price,client_name,client_phone,created_at&limit=10`, { headers: hdrs });
+    const stalled = await res.json();
+    if (!Array.isArray(stalled) || stalled.length === 0) return;
+
+    for (const order of stalled) {
+      if (alertedStalledOrders.has(order.id)) continue;
+      alertedStalledOrders.add(order.id);
+
+      const elapsedMins = Math.round((Date.now() - new Date(order.created_at).getTime()) / 60000);
+      const shortId = order.id.slice(0, 8).toUpperCase();
+      const stallMsg =
+        `⚠️ *[KITCHEN STALL ALERT: ORDER UNACKNOWLEDGED]*\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `• Order: *#${shortId}* (KES ${Number(order.total_price || 0).toLocaleString()})\n` +
+        `• Customer: ${order.client_name || "Customer"} (\`${order.client_phone || "N/A"}\`)\n` +
+        `• Time Elapsed: *${elapsedMins} Minutes in PAID State*\n` +
+        `• Risk: Kitchen staff has not accepted order with \`!prep #${shortId}\`.\n` +
+        `• Potential Cause: Merchant phone offline or Wi-Fi blackout (KPLC factor).\n\n` +
+        `👉 *Action:* Please call merchant or run \`!prep ${shortId}\` to dispatch.`;
+
+      await safeSendMessage(targetJid, { text: stallMsg }).catch(() => {});
+    }
+  } catch (err) {
+    // Non-blocking telemetry check
+  }
+}
+
 /**
  * Evaluates cadence triggers and dispatches when wall-clock matches
  */
@@ -89,6 +131,11 @@ export async function evaluateCadenceTriggers({
   const markDispatched = (key) => {
     lastDispatched[key] = eat.dateKey;
   };
+
+  // Continuous Invariant Check: Kitchen Stall Sentinel (15-min SLA check)
+  if (!forceTrigger) {
+    checkStalledKitchenOrders(safeSendMessage, targetOversightJid).catch(() => {});
+  }
 
   // 0. 03:00 AM EAT — Autonomous Database Snapshot Sentinel
   if ((eat.hour === 3 && eat.minute >= 0 && eat.minute < 5 && canDispatch("dbBackup")) || forceTrigger === "backup") {

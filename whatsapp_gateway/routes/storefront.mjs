@@ -227,11 +227,14 @@ export async function handleStorefrontRoutes({
           }));
         }
 
-        // Approved or Trimmed Surebet: return Till number only AFTER stock is locked!
+        // Approved or Trimmed Surebet: return Till number and pickup verification PIN only AFTER stock is locked!
+        const pickupPin = String(verdict.order_id || "").slice(-4).toUpperCase();
         res.writeHead(200);
         return res.end(JSON.stringify({
           success: true,
           ...verdict,
+          pickup_pin: pickupPin,
+          delivery_pin_instructions: "Share this 4-digit PIN with your delivery rider upon doorstep handover.",
           mpesa_till_number: resolvedShop?.mpesa_till_number || null
         }));
       } catch (err) {

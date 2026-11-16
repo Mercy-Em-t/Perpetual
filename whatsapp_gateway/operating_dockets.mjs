@@ -309,9 +309,10 @@ export async function generateSettlementDocketReport() {
   if (eligiblePayouts.length > 0) {
     card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     card += `👉 *WHAT TO SUBMIT BACK TO THE SYSTEM:*\n`;
-    card += `• Release all payouts: \`!settle approve all\`\n`;
+    card += `• Export M-Pesa CSV batch: \`!settle export\`\n`;
+    card += `• Mark internal settlement ledger paid: \`!settle approve all\`\n`;
     const topShop = eligiblePayouts[0];
-    card += `• Release single merchant: \`!settle approve ${topShop.shopSlug}\`\n`;
+    card += `• Settle single merchant: \`!settle approve ${topShop.shopSlug}\`\n`;
     card += `• Hold settlement for review: \`!settle hold ${topShop.shopSlug} [reason]\``;
   } else if (rolledOverPayouts.length > 0) {
     card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
