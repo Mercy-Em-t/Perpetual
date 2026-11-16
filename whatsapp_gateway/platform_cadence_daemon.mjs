@@ -24,6 +24,7 @@ import {
   generateMonthlyDocketReport
 } from "./operating_dockets.mjs";
 import { runFullDualEODReconciliation } from "./eod_reconciler.mjs";
+import { executeDatabaseBackup } from "./database_backup_sentinel.mjs";
 
 const CHECK_INTERVAL_MS = 30 * 1000; // Check every 30 seconds
 let daemonTimer = null;
@@ -37,7 +38,8 @@ const lastDispatched = {
   weeklyTuesday: null,
   monthlyFirst: null,
   preMonthlyReminder: null,
-  preAnnualReminder: null
+  preAnnualReminder: null,
+  dbBackup: null
 };
 
 /**
@@ -87,6 +89,19 @@ export async function evaluateCadenceTriggers({
   const markDispatched = (key) => {
     lastDispatched[key] = eat.dateKey;
   };
+
+  // 0. 03:00 AM EAT — Autonomous Database Snapshot Sentinel
+  if ((eat.hour === 3 && eat.minute >= 0 && eat.minute < 5 && canDispatch("dbBackup")) || forceTrigger === "backup") {
+    try {
+      console.log(`[CADENCE DAEMON] Running 03:00 AM Database Backup Snapshot (${eat.dateKey})...`);
+      const backupResult = await executeDatabaseBackup({ safeSendMessage });
+      markDispatched("dbBackup");
+      executed.push({ key: "dbBackup", success: true, file: backupResult.filename });
+    } catch (err) {
+      console.error("[CADENCE DAEMON] Database backup error:", err.message);
+      executed.push({ key: "dbBackup", success: false, error: err.message });
+    }
+  }
 
   // 1. 06:30 AM EAT — Morning Overnight Reconciliation Docket
   if ((eat.hour === 6 && eat.minute >= 30 && eat.minute < 35 && canDispatch("morning")) || forceTrigger === "morning") {

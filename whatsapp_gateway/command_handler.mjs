@@ -39,6 +39,7 @@ import {
   generateWeeklyTuesdayDocketReport,
   generateMonthlyDocketReport
 } from "./operating_dockets.mjs";
+import { executeDatabaseBackup } from "./database_backup_sentinel.mjs";
 
 export const KNOWN_COMMANDS = [
   "help", "status", "health", "orders", "order", "details",
@@ -53,7 +54,7 @@ export const KNOWN_COMMANDS = [
   "ticket", "tickets", "claim", "resolve", "sentinel",
   "voucher", "vouchers", "refund",
   "infractions", "infraction", "suspend", "reinstate",
-  "docket", "dockets"
+  "docket", "dockets", "backup"
 ];
 
 const dbHdrs = {
@@ -2064,6 +2065,19 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Docket generation error: ${err.message}` });
+      return;
+    }
+  }
+
+  // 9. Autonomous Database Backup Snapshot: !backup [now]
+  if (command === "!backup") {
+    try {
+      await safeSendMessage(replyJid, { text: `⏳ *[BACKUP INITIATED]* Executing full snapshot across 6 Supabase tables...` });
+      const res = await executeDatabaseBackup();
+      await safeSendMessage(replyJid, { text: res.formattedWhatsAppMessage });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Database backup failed: ${err.message}` });
       return;
     }
   }

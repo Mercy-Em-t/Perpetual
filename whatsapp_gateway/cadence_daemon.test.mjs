@@ -64,4 +64,15 @@ test("Cadence Daemon: Evaluates all forced trigger actions cleanly", async () =>
   assert.equal(resPreAnnual.executed[0].key, "preAnnualReminder");
   assert.equal(resPreAnnual.executed[0].success, true);
   assert.ok(sentMessages[4].text.includes("2 DAYS TO ANNUAL DATE WITH THE SYSTEM"));
+
+  // Test 03:00 AM database backup force trigger
+  const resBackup = await evaluateCadenceTriggers({
+    safeSendMessage: mockSend,
+    forceTrigger: "backup"
+  });
+  assert.equal(resBackup.executed.length, 1);
+  assert.equal(resBackup.executed[0].key, "dbBackup");
+  assert.equal(resBackup.executed[0].success, true);
+  assert.ok(sentMessages[5].text.includes("DATABASE BACKUP SENTINEL: 03:00 AM SNAPSHOT"));
+  assert.ok(sentMessages[4].text.includes("2 DAYS TO ANNUAL DATE WITH THE SYSTEM"));
 });
