@@ -664,6 +664,35 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
 
       await safeSendMessage(replyJid, { text: progressMsg });
 
+      // Direct 1-on-1 Customer WhatsApp Notification on Dispatch or Delivery
+      if (updatedOrder.client_phone && (command === "!dispatch" || command === "!delivered" || command === "!confirm")) {
+        const customerJid = formatPhoneToWhatsAppJid(updatedOrder.client_phone);
+        if (customerJid) {
+          let customerMsg = "";
+          if (command === "!dispatch") {
+            const pin = updatedOrder.pickup_pin || updatedOrder.id.slice(-4).toUpperCase();
+            customerMsg =
+              `🛵 *[ORDER DISPATCHED — IN TRANSIT]*\n` +
+              `Hi ${updatedOrder.client_name || "Customer"}, your order *${displayId}* from *${shop.name}* is on its way!\n\n` +
+              `• Assigned Rider: *${courier}*\n` +
+              `• Delivery Verification PIN: *${pin}* (Share with rider upon delivery)\n` +
+              `• Total Amount: *KES ${Number(updatedOrder.total_price || 0).toLocaleString()}*\n\n` +
+              `_Thank you for choosing ${shop.name}!_`;
+          } else if (command === "!delivered" || command === "!confirm") {
+            customerMsg =
+              `🎉 *[ORDER DELIVERED]*\n` +
+              `Hi ${updatedOrder.client_name || "Customer"}, your order *${displayId}* has been confirmed delivered.\n\n` +
+              `If you have any feedback or questions, simply reply directly to this chat.\n` +
+              `_Enjoy your purchase from ${shop.name}!_`;
+          }
+          if (customerMsg) {
+            await safeSendMessage(customerJid, { text: customerMsg }).catch(err => {
+              console.warn(`[CUSTOMER NOTIFY WARN] Failed to message ${customerJid}:`, err.message);
+            });
+          }
+        }
+      }
+
       // Mirror station progression to Perpetua Main Group (perpetua) & Shop Management
       const routing = shop.fulfillment_settings?.whatsapp_routing || {};
       const mirrorJids = new Set([

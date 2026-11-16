@@ -242,8 +242,12 @@ export async function generateSettlementDocketReport() {
     const commissionDeduction = (grossSales * commissionPercent) / 100;
     const reserveHold = (grossSales * reservePercent) / 100;
     const netPayout = Math.max(0, grossSales - commissionDeduction - reserveHold);
+    const meetsDisbursementFloor = netPayout >= 500;
 
-    totalPlatformPayout += netPayout;
+    if (meetsDisbursementFloor) {
+      totalPlatformPayout += netPayout;
+    }
+
     settlementByShop.push({
       shopId: shop.id,
       shopName: shop.name,
@@ -254,11 +258,15 @@ export async function generateSettlementDocketReport() {
       commissionDeduction,
       reserveHold,
       netPayout: Math.round(netPayout * 100) / 100,
+      meetsDisbursementFloor,
+      status: meetsDisbursementFloor ? "READY_FOR_DISBURSEMENT" : "ROLLED_OVER_BELOW_MINIMUM",
       phone: shop.fulfillment_settings?.whatsapp_routing?.owner_phone || shop.whatsapp_number || shop.phone || "Not set"
     });
   }
 
   settlementByShop.sort((a, b) => b.netPayout - a.netPayout);
+  const eligiblePayouts = settlementByShop.filter(s => s.meetsDisbursementFloor);
+  const rolledOverPayouts = settlementByShop.filter(s => !s.meetsDisbursementFloor);
 
   const formattedEAT = new Date().toLocaleString("en-GB", {
     timeZone: "Africa/Nairobi",
@@ -273,24 +281,41 @@ export async function generateSettlementDocketReport() {
   card += `• Audit Timestamp: *${formattedEAT} EAT*\n`;
   card += `• Settlement Cycle: *T+1 (Sales Date: ${yDateStr})*\n`;
   card += `• Total Net Payout Pool: *KES ${totalPlatformPayout.toLocaleString("en-US", { minimumFractionDigits: 2 })}*\n`;
-  card += `• Stores Eligible: *${settlementByShop.length} Merchants*\n\n`;
+  card += `• Merchants Ready (>= KES 500): *${eligiblePayouts.length}*\n`;
+  if (rolledOverPayouts.length > 0) {
+    card += `• Rolled Over (< KES 500 Floor): *${rolledOverPayouts.length} Merchants*\n`;
+  }
+  card += `\n`;
 
-  if (settlementByShop.length > 0) {
-    card += `📋 *PRE-COMPUTED PAYOUT SCHEDULE:*\n`;
-    settlementByShop.forEach((s, i) => {
+  if (eligiblePayouts.length > 0) {
+    card += `📋 *READY FOR DISBURSEMENT:*\n`;
+    eligiblePayouts.forEach((s, i) => {
       card += `${i + 1}. *${s.shopName}* (\`${s.shopSlug}\`)\n`;
       card += `   • Net Payout: *KES ${s.netPayout.toLocaleString("en-US", { minimumFractionDigits: 2 })}*\n`;
       card += `   • Gross Sales: KES ${s.grossSales.toLocaleString()} (${s.orderCount} orders)\n`;
       card += `   • Platform Fee (${s.commissionPercent}%): -KES ${s.commissionDeduction.toFixed(0)} | Reserve: -KES ${s.reserveHold.toFixed(0)}\n`;
       card += `   • Recipient Phone: \`${s.phone}\`\n\n`;
     });
+  }
 
+  if (rolledOverPayouts.length > 0) {
+    card += `⏸️ *ROLLED OVER (BELOW KES 500 THRESHOLD):*\n`;
+    rolledOverPayouts.forEach((s, i) => {
+      card += `• *${s.shopName}* (\`${s.shopSlug}\`): Net *KES ${s.netPayout.toLocaleString("en-US", { minimumFractionDigits: 2 })}* (Rolled over to avoid M-Pesa tariff erosion)\n`;
+    });
+    card += `\n`;
+  }
+
+  if (eligiblePayouts.length > 0) {
     card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     card += `👉 *WHAT TO SUBMIT BACK TO THE SYSTEM:*\n`;
     card += `• Release all payouts: \`!settle approve all\`\n`;
-    const topShop = settlementByShop[0];
+    const topShop = eligiblePayouts[0];
     card += `• Release single merchant: \`!settle approve ${topShop.shopSlug}\`\n`;
     card += `• Hold settlement for review: \`!settle hold ${topShop.shopSlug} [reason]\``;
+  } else if (rolledOverPayouts.length > 0) {
+    card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    card += `ℹ️ *All current shop balances are below KES 500 and will roll over to the next T+1 cycle automatically.*`;
   } else {
     card += `✅ *STATUS: ZERO SETTLEMENTS DUE*\n`;
     card += `• No unreleased T+1 merchant sales recorded for ${yDateStr}.\n`;
