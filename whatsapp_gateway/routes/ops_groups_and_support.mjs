@@ -715,6 +715,47 @@ export async function handleOpsGroupsAndSupportRoutes({
       }
     }
 
+    // POST /api/alert (Dispatches alerts e.g. Payment Check Request, Watchdog, Sentinel to WhatsApp)
+    if (req.method === "POST" && parsedUrl.pathname === "/api/alert") {
+      try {
+        const alert = await parseJsonBody(req);
+        const title = alert.title || "🚨 [PLATFORM ALERT]";
+        const level = alert.level || "INFO";
+        const details = alert.details || alert.message || "";
+        const source = alert.source || "storefront";
+
+        const alertText =
+          `*${title}*\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `• *Level:* ${level}\n` +
+          `• *Source:* ${source}\n` +
+          `• *Details:* ${details}\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━\n` +
+          (source === "storefront_payment_troubleshooter"
+            ? `⚡ _Cashiers: Check Till phone statement, then reply \`!clear <order_id> <mpesa_code>\` to unblock customer._`
+            : `_Automated Gateway Dispatch_`);
+
+        const isCashierCheck = source === "storefront_payment_troubleshooter" || /Payment Check/i.test(title);
+        const targets = isCashierCheck
+          ? [GROUPS?.cashierDesk?.jid, GROUPS?.itHelpdesk?.jid, GROUPS?.general?.jid].filter(Boolean)
+          : [GROUPS?.itHelpdesk?.jid, GROUPS?.adminOversight?.jid, GROUPS?.general?.jid].filter(Boolean);
+
+        for (const t of targets) {
+          try {
+            await safeSendMessage(t, { text: alertText });
+          } catch (sendErr) {
+            console.warn(`[ALERT DISPATCH ERROR] Failed to send to ${t}:`, sendErr.message);
+          }
+        }
+
+        res.writeHead(200);
+        return res.end(JSON.stringify({ success: true, targets: targets.length, status: "DISPATCHED" }));
+      } catch (err) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    }
+
     // POST /api/eod-report (Trigger Live End-of-Day Multi-Tenant Register Reconciliation)
     if ((req.method === "POST" || req.method === "GET") && parsedUrl.pathname === "/api/eod-report") {
       try {

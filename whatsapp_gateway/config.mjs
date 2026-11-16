@@ -109,5 +109,38 @@ export const GROUPS = {
       `• !eod [platform | <shop_slug> | dispatch]\n` +
       `• !reconcile\n` +
       `• !summary`
+  },
+  cashierDesk: {
+    name: "Perpetua - Cashier Desk",
+    role: "cashier",
+    jid: "120363430424069635@g.us",
+    inviteUrl: "https://chat.whatsapp.com/LxzzLihL9vn5ymgdWevxjN",
+    welcome:
+      `🔔 *Perpetua Cashier & Floor Desk Active*\n\n` +
+      `Channel dedicated to instant storefront checkout unblocking, manual cashier payment checks, and Till reconciliation.\n` +
+      `_Type *!clear <order_id> <code>* to provisionally unblock a customer waiting at checkout._`,
+    description:
+      `🔔 Perpetua Cashier & Floor Desk\n\n` +
+      `Commands:\n` +
+      `• !clear <order_id> <mpesa_code> (Provisionally release stuck order)\n` +
+      `• !unseconded (View active provisional checkouts)\n` +
+      `• !help`
+  },
+  financeAccounting: {
+    name: "Perpetua - Finance & Accounting",
+    role: "accounting",
+    jid: "120363433346340396@g.us",
+    inviteUrl: "https://chat.whatsapp.com/BBIMrO2ZRLTDM0CRWvetmi",
+    welcome:
+      `📊 *Perpetua Finance & Accounting Active*\n\n` +
+      `Dedicated channel for ledger variance auditing, automated nightly EOD register closures, and zero-ghost-payment seconding.\n` +
+      `_Type *!eod* for closure reports or *!ghosts* to audit unseconded orders._`,
+    description:
+      `📊 Perpetua Finance & Accounting\n\n` +
+      `Commands:\n` +
+      `• !eod [platform | <shop_slug> | dispatch]\n` +
+      `• !unseconded | !ghosts (Audit uncorroborated payments)\n` +
+      `• !second <order_id> <mpesa_code> (Corroborate after phone check)\n` +
+      `• !summary (GMV revenue rollups)`
   }
 };
