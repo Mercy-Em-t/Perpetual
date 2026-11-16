@@ -291,15 +291,32 @@ export async function handleStorefrontRoutes({
 
         // Evaluate coupon / promotion
         let discount = 0;
+        let appliedPromo = null;
         if (coupon_code) {
           const promoRes = await fetch(`${SUPABASE_URL}/rest/v1/promotions?shop_id=eq.${shop_id}&is_active=eq.true&select=*`, { headers: hdrs });
           const promos = await promoRes.json();
-          const matchedPromo = (promos || []).find(p => (p.name || "").toLowerCase() === coupon_code.toLowerCase().trim());
+          const cleanCode = String(coupon_code).toLowerCase().trim();
+          const matchedPromo = (promos || []).find(p => 
+            (p.coupon_code && p.coupon_code.toLowerCase().trim() === cleanCode) ||
+            (p.name && p.name.toLowerCase().trim() === cleanCode)
+          );
           if (matchedPromo) {
-            if (matchedPromo.discount_type === "percent") {
-              discount = (grossSubtotal * Number(matchedPromo.discount_value || 0)) / 100;
-            } else if (matchedPromo.discount_type === "flat") {
-              discount = Math.min(grossSubtotal, Number(matchedPromo.discount_value || 0));
+            const isExpired = matchedPromo.expires_at && new Date(matchedPromo.expires_at).getTime() < Date.now();
+            if (!isExpired) {
+              appliedPromo = {
+                id: matchedPromo.id,
+                name: matchedPromo.coupon_code || matchedPromo.name,
+                discount_type: matchedPromo.discount_type || "flat",
+                discount_value: Number(matchedPromo.discount_value || 0),
+                bundle_price: Number(matchedPromo.bundle_price || 0),
+                min_items: matchedPromo.min_items || 1,
+                description: matchedPromo.description || "Promotional Discount"
+              };
+              if (matchedPromo.discount_type === "percent") {
+                discount = (grossSubtotal * Number(matchedPromo.discount_value || 0)) / 100;
+              } else if (matchedPromo.discount_type === "flat") {
+                discount = Math.min(grossSubtotal, Number(matchedPromo.discount_value || 0));
+              }
             }
           }
         }
@@ -313,6 +330,7 @@ export async function handleStorefrontRoutes({
           discount,
           delivery_fee: deliveryFee,
           total_payable: totalPayable,
+          coupon: appliedPromo,
           items: evaluatedItems
         }));
       } catch (err) {

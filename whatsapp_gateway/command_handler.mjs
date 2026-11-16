@@ -26,6 +26,7 @@ import {
   listShopProducts,
   getAllShops
 } from "./tenant_resolver.mjs";
+import { formatPhoneToWhatsAppJid } from "./eod_reconciler.mjs";
 
 export const KNOWN_COMMANDS = [
   "help", "status", "health", "orders", "order", "details",
@@ -37,7 +38,8 @@ export const KNOWN_COMMANDS = [
   "resurrect", "revive", "reorder", "repeat", "buyagain",
   "shop", "shops", "stores", "bind",
   "pool", "tier", "approve-order", "decline-order",
-  "ticket", "tickets", "claim", "resolve", "sentinel"
+  "ticket", "tickets", "claim", "resolve", "sentinel",
+  "voucher", "vouchers", "refund"
 ];
 
 const dbHdrs = {
@@ -357,6 +359,9 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
         `• *!product stock* — View inventory overview (in-stock vs out)\n` +
         `• *!product stock <name or ID> <in | out>* — Toggle item availability\n` +
         `• *!product list [category]* — View active items\n\n` +
+        `*🎟️ Customer Refunds & Replacement Vouchers:*\n` +
+        `• *!voucher <order_id> [amount] [reason]* — Issue store credit replacement voucher\n` +
+        `• *!refund <order_id> voucher [amount] [reason]* — Credit customer wallet & deduct from settlement\n\n` +
         `_All modifications publish live to your online storefront immediately._`;
       await safeSendMessage(replyJid, { text: helpMsg });
       return;
@@ -896,6 +901,11 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
       });
       return;
     }
+  }
+
+  // 12. Customer Refunds & Replacement Vouchers: !voucher <order_id> [amount] [reason] or !refund <order_id> [amount] [reason]
+  if (command === "!voucher" || command === "!refund") {
+    return await handleVoucherIssuanceCommand(args, replyJid, senderId, callerName, safeSendMessage, shop, isMgmt);
   }
 
   // Fallback
@@ -1916,8 +1926,8 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
     }
   }
 
-  // 6. Allow Platform Floor Ops / Admin Oversight to execute !paid, !clear, !pair, !pack, !verify, !dispatch, !delivered, !confirm and mirror to the Shop's groups
-  if (command === "!paid" || command === "!clear" || command === "!pair" || command === "!pack" || command === "!verify" || command === "!dispatch" || command === "!delivered" || command === "!confirm") {
+  // 6. Allow Platform Floor Ops / Admin Oversight to execute !paid, !clear, !pair, !pack, !verify, !dispatch, !delivered, !confirm, !voucher, !refund and mirror to the Shop's groups
+  if (command === "!paid" || command === "!clear" || command === "!pair" || command === "!pack" || command === "!verify" || command === "!dispatch" || command === "!delivered" || command === "!confirm" || command === "!voucher" || command === "!refund") {
     const firstToken = args.trim().split(/\s+/)[0];
     if (!firstToken) {
       await safeSendMessage(replyJid, { text: `⚠️ *Usage:* \`${command} <order_id>\`` });
@@ -2344,5 +2354,191 @@ export async function broadcastProductToChannel(shop, product, safeSendMessage) 
     console.log(`[CHANNEL BROADCAST] Published "${product.name}" to channel ${channelJid}`);
   } catch (err) {
     console.error(`[CHANNEL BROADCAST ERROR]:`, err.message);
+  }
+}
+
+// =============================================================================
+// SUB-ROUTINE: REPLACEMENT VOUCHER & REFUND ISSUANCE (MANAGEMENT DESK)
+// =============================================================================
+/**
+ * Issues a replacement store credit voucher directly from WhatsApp Management Desk.
+ * Syntax:
+ *   !voucher <order_id> [amount] [reason...]
+ *   !refund <order_id> [voucher] [amount] [reason...]
+ */
+export async function handleVoucherIssuanceCommand(args, replyJid, senderId, callerName, safeSendMessage, shop, isMgmt = true) {
+  if (!isMgmt) {
+    await safeSendMessage(replyJid, {
+      text: `🔒 *Access Restricted:*\nReplacement voucher issuance is restricted to Management Oversight.`
+    });
+    return;
+  }
+
+  const rawArgs = (args || "").trim();
+  if (!rawArgs) {
+    await safeSendMessage(replyJid, {
+      text: `🎟️ *Replacement Voucher Issuance (Management Desk)*\n\n` +
+            `*Usage:*\n` +
+            `• \`!voucher <order_id> [amount] [reason]\`\n` +
+            `• \`!refund <order_id> voucher [amount] [reason]\`\n\n` +
+            `*Examples:*\n` +
+            `• \`!voucher ORD-BOT-261116-4A1F 150 Spoiled Daima milk\`\n` +
+            `• \`!voucher #832F1B75\` _(Full order amount replacement)_\n` +
+            `• \`!voucher 832f1b75 500 Delayed delivery & cold meal\``
+    });
+    return;
+  }
+
+  const tokens = rawArgs.split(/\s+/).filter(Boolean);
+  const orderQuery = tokens[0];
+  let customAmount = null;
+  let reasonTokens = [];
+
+  // Parse optional 'voucher' keyword or amount
+  let idx = 1;
+  if (tokens[idx] && (tokens[idx].toLowerCase() === "voucher" || tokens[idx].toLowerCase() === "credit")) {
+    idx++;
+  }
+  if (tokens[idx] && /^\d+(\.\d+)?$/.test(tokens[idx])) {
+    customAmount = parseFloat(tokens[idx]);
+    idx++;
+  }
+  reasonTokens = tokens.slice(idx);
+  const reason = reasonTokens.join(" ").trim() || "Customer Satisfaction Replacement";
+
+  // 1. Resolve order
+  const order = await resolveShopOrder(shop ? shop.id : null, orderQuery);
+  if (!order) {
+    await safeSendMessage(replyJid, {
+      text: `❌ *Order Not Found:*\nCould not find order matching \`${orderQuery}\`${shop ? ` in ${shop.name}` : ""}.\nCheck order ID and try again.`
+    });
+    return;
+  }
+
+  // 2. Resolve shop if in cross-tenant context
+  const targetShop = shop || (await getAllShops()).find(s => s.id === order.shop_id) || {
+    id: order.shop_id,
+    name: "Partner Store",
+    slug: "store"
+  };
+
+  // 3. Determine voucher value (defaults to full order total if not specified)
+  const voucherAmount = customAmount !== null && customAmount > 0 ? customAmount : Number(order.total_price || 0);
+  if (!voucherAmount || voucherAmount <= 0) {
+    await safeSendMessage(replyJid, {
+      text: `⚠️ *Invalid Amount:* Voucher value must be greater than KES 0.`
+    });
+    return;
+  }
+
+  // 4. Generate Unique Voucher Code: VCH-<SHOP_PREFIX>-<HEX4>
+  const slugClean = (targetShop.slug || targetShop.name || "VCH").replace(/[^a-zA-Z]/g, "").toUpperCase();
+  const shopPrefix = slugClean.slice(0, 3) || "VCH";
+  const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const voucherCode = `VCH-${shopPrefix}-${randomSuffix}`;
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const displayExpiry = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+  const displayOrderId = formatDisplayOrderId(order);
+
+  // 5. Insert into Supabase `promotions` table
+  const promoPayload = {
+    shop_id: targetShop.id,
+    name: `Replacement: ${displayOrderId}`,
+    coupon_code: voucherCode,
+    description: `Replacement voucher for ${displayOrderId} - ${reason}`,
+    discount_type: "flat",
+    discount_value: voucherAmount,
+    bundle_price: 0,
+    min_items: 1,
+    starts_at: now.toISOString(),
+    expires_at: expiresAt,
+    is_active: true
+  };
+
+  try {
+    const promoRes = await fetch(`${SUPABASE_URL}/rest/v1/promotions`, {
+      method: "POST",
+      headers: {
+        ...dbHdrs,
+        "Prefer": "return=representation"
+      },
+      body: JSON.stringify(promoPayload)
+    });
+
+    if (!promoRes.ok) {
+      const errText = await promoRes.text().catch(() => "");
+      throw new Error(`Failed to create promotion in Supabase: ${errText}`);
+    }
+
+    // 6. Append audit note to order
+    const timeStr = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    const auditEntry = `• [${timeStr} REPLACEMENT-VOUCHER]: Issued ${voucherCode} (KES ${voucherAmount}) by @${callerName}. Reason: ${reason}`;
+    const updatedNotes = order.notes ? `${order.notes}\n${auditEntry}` : auditEntry;
+
+    await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${order.id}`, {
+      method: "PATCH",
+      headers: { ...dbHdrs, "Prefer": "return=minimal" },
+      body: JSON.stringify({ notes: updatedNotes })
+    });
+
+    // 7. Customer direct notification
+    let customerNotified = false;
+    const clientPhone = order.client_phone || (order.fulfillment_settings?.phone);
+    const clientJid = formatPhoneToWhatsAppJid(clientPhone);
+
+    const storefrontBase = "https://updatedtms-whitelabel-core.vercel.app";
+    const redeemUrl = `${storefrontBase}/s/${targetShop.slug}/order?voucher=${voucherCode}`;
+
+    if (clientJid) {
+      const customerCard =
+        `🎟️ *Replacement Voucher Issued — ${targetShop.name}*\n\n` +
+        `Dear ${order.client_name || "Valued Customer"},\n` +
+        `We sincerely apologize for the issue with your order *${displayOrderId}*.\n\n` +
+        `As a replacement store credit, we have issued a direct voucher for you:\n\n` +
+        `💰 *Store Credit:* *KES ${voucherAmount.toLocaleString()}*\n` +
+        `🏷️ *Voucher Code:* *\`${voucherCode}\`*\n` +
+        `⏳ *Validity:* 30 Days (Expires ${displayExpiry})\n\n` +
+        `👉 *1-Tap Instant Checkout:* \n${redeemUrl}\n\n` +
+        `_Or simply enter code *${voucherCode}* at checkout to deduct KES ${voucherAmount.toLocaleString()} from your cart. Thank you for your continued patience!_`;
+
+      try {
+        await safeSendMessage(clientJid, { text: customerCard });
+        customerNotified = true;
+      } catch (sendErr) {
+        console.warn(`[VOUCHER] Could not send direct customer WhatsApp:`, sendErr.message);
+      }
+    }
+
+    // 8. Management Desk Confirmation
+    const mgmtCard =
+      `🎟️ *Replacement Voucher Issued Successfully*\n` +
+      `╭────────────────────────────────────────╮\n` +
+      `  • Store: *${targetShop.name}*\n` +
+      `  • Source Order: *${displayOrderId}*\n` +
+      `  • Customer: *${order.client_name || "Guest"}* (${clientPhone || "No phone"})\n` +
+      `  • Voucher Code: *\`${voucherCode}\`*\n` +
+      `  • Credit Value: *KES ${voucherAmount.toLocaleString()}*\n` +
+      `  • Reason: *${reason}*\n` +
+      `  • Validity: *30 Days* (Expires ${displayExpiry})\n` +
+      `  • Issued By: @${callerName}\n` +
+      `╰────────────────────────────────────────╯\n` +
+      `⚖️ *Dispute Settlement Adjustment:*\n` +
+      `_KES ${voucherAmount.toLocaleString()} will be debited from ${targetShop.name}'s next settlement cycle to fund the customer credit._\n\n` +
+      (customerNotified
+        ? `📱 *Customer WhatsApp:* Sent directly to customer with 1-tap redemption link ✅`
+        : `⚠️ *Customer Notice:* Customer phone unrecorded; please provide code *\`${voucherCode}\`* to customer manually.`);
+
+    await safeSendMessage(replyJid, { text: mgmtCard });
+  } catch (err) {
+    console.error(`[VOUCHER ISSUANCE ERROR]`, err);
+    await safeSendMessage(replyJid, {
+      text: `❌ *Failed to issue replacement voucher:* ${err.message}`
+    });
   }
 }
