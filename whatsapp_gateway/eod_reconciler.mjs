@@ -9,7 +9,6 @@
  * 2. Platform-Wide Consolidated Closure: Dispatched to Perpetua Community / Executive Oversight.
  * 3. Dual Automated Dispatch: Dispatches each shop their own report and the platform rollup to community.
  */
-import { createClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -17,25 +16,11 @@ import { GROUPS, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "./config.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load environment variables from tms-whitelabel-core or local .env
-let envUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || SUPABASE_URL;
-let envKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY;
-
-if (!envUrl || !envKey) {
-  try {
-    const rootEnv = fs.readFileSync("C:/Users/user/Documents/Quality assurance/tms-whitelabel-core/.env", "utf8");
-    rootEnv.split("\n").forEach(line => {
-      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
-      if (match) {
-        let value = (match[2] || "").trim().replace(/^["']|["']$/g, "");
-        if (match[1] === "VITE_SUPABASE_URL" || match[1] === "SUPABASE_URL") envUrl = value;
-        if (match[1] === "SUPABASE_SERVICE_ROLE_KEY") envKey = value;
-      }
-    });
-  } catch (ignored) {}
-}
-
-export const supabase = createClient(envUrl, envKey);
+const dbHdrs = {
+  apikey: SUPABASE_SERVICE_ROLE_KEY,
+  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+  "Content-Type": "application/json"
+};
 
 /**
  * Returns the exact UTC ISO strings for Kenya EAT day boundaries.
@@ -72,11 +57,12 @@ export function formatPhoneToWhatsAppJid(phoneStr) {
 export async function generateShopEODReport(shopIdentifier = "test-shop", targetDate = new Date()) {
   // 1. Resolve Shop from Supabase
   let shop = null;
-  const { data: bySlug } = await supabase.from("shops").select("id, name, slug, phone, whatsapp_number, mpesa_till_number, fulfillment_settings").eq("slug", shopIdentifier).maybeSingle();
+  const bySlugRes = await fetch(`${SUPABASE_URL}/rest/v1/shops?slug=eq.${shopIdentifier}&select=id,name,slug,phone,whatsapp_number,mpesa_till_number,fulfillment_settings`, { headers: dbHdrs });
+  const bySlug = (await bySlugRes.json())?.[0];
   if (bySlug) shop = bySlug;
   else {
-    const { data: byId } = await supabase.from("shops").select("id, name, slug, phone, whatsapp_number, mpesa_till_number, fulfillment_settings").eq("id", shopIdentifier).maybeSingle();
-    shop = byId;
+    const byIdRes = await fetch(`${SUPABASE_URL}/rest/v1/shops?id=eq.${shopIdentifier}&select=id,name,slug,phone,whatsapp_number,mpesa_till_number,fulfillment_settings`, { headers: dbHdrs });
+    shop = (await byIdRes.json())?.[0];
   }
 
   const shopName = shop?.name || "Savannah Sandbox Test Lab";
@@ -90,18 +76,14 @@ export async function generateShopEODReport(shopIdentifier = "test-shop", target
   const { dateStr, startOfDayUtc, endOfDayUtc } = getEatDateBoundaries(targetDate);
 
   // 3. Query Live Orders for this Shop
-  let orderQuery = supabase.from("orders")
-    .select("id, total_price, status, client_name, client_phone, mpesa_code, created_at, shop_id")
-    .gte("created_at", startOfDayUtc)
-    .lte("created_at", endOfDayUtc)
-    .order("created_at", { ascending: false });
-
+  let orderQueryUrl = `${SUPABASE_URL}/rest/v1/orders?created_at=gte.${startOfDayUtc}&created_at=lte.${endOfDayUtc}&select=id,total_price,status,client_name,client_phone,mpesa_code,created_at,shop_id&order=created_at.desc`;
   if (shopId) {
-    orderQuery = orderQuery.eq("shop_id", shopId);
+    orderQueryUrl += `&shop_id=eq.${shopId}`;
   }
 
-  const { data: orders, error: orderErr } = await orderQuery;
-  if (orderErr) throw new Error(`Orders fetch failed: ${orderErr.message}`);
+  const orderRes = await fetch(orderQueryUrl, { headers: dbHdrs });
+  if (!orderRes.ok) throw new Error(`Orders fetch failed: ${orderRes.statusText}`);
+  const orders = await orderRes.json();
 
   const paidOrders = (orders || []).filter(o => ["paid", "completed", "delivered"].includes((o.status || "").toLowerCase()));
   const pendingOrders = (orders || []).filter(o => ["pending", "pending_payment"].includes((o.status || "").toLowerCase()));
@@ -110,10 +92,8 @@ export async function generateShopEODReport(shopIdentifier = "test-shop", target
   const totalPendingRevenue = pendingOrders.reduce((sum, o) => sum + (Number(o.total_price) || 0), 0);
 
   // 4. Query Latest Till Balance & Ledger Continuity
-  const { data: latestPayments } = await supabase.from("payments")
-    .select("raw_payload, created_at")
-    .order("created_at", { ascending: false })
-    .limit(1);
+  const payRes = await fetch(`${SUPABASE_URL}/rest/v1/payments?select=raw_payload,created_at&order=created_at.desc&limit=1`, { headers: dbHdrs });
+  const latestPayments = (await payRes.json()) || [];
 
   const raw = latestPayments?.[0]?.raw_payload || {};
   const currentTillBalance = raw.balance != null ? Number(raw.balance) : null;
@@ -179,24 +159,22 @@ export async function generatePlatformEODReport(targetDate = new Date()) {
   const { dateStr, startOfDayUtc, endOfDayUtc } = getEatDateBoundaries(targetDate);
 
   // 1. Fetch all shops
-  const { data: shops } = await supabase.from("shops").select("id, name, slug, phone, whatsapp_number, mpesa_till_number, fulfillment_settings");
+  const shopsRes = await fetch(`${SUPABASE_URL}/rest/v1/shops?select=id,name,slug,phone,whatsapp_number,mpesa_till_number,fulfillment_settings`, { headers: dbHdrs });
+  const shops = (await shopsRes.json()) || [];
   const shopMap = new Map();
-  (shops || []).forEach(s => shopMap.set(s.id, s));
+  shops.forEach(s => shopMap.set(s.id, s));
 
   // 2. Fetch all orders today
-  const { data: orders, error: orderErr } = await supabase.from("orders")
-    .select("id, shop_id, status, total_price, client_name, client_phone, mpesa_code, created_at")
-    .gte("created_at", startOfDayUtc)
-    .lte("created_at", endOfDayUtc)
-    .order("created_at", { ascending: false });
-
-  if (orderErr) throw new Error(`Platform orders fetch failed: ${orderErr.message}`);
+  const ordersRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/orders?created_at=gte.${startOfDayUtc}&created_at=lte.${endOfDayUtc}&select=id,shop_id,status,total_price,client_name,client_phone,mpesa_code,created_at&order=created_at.desc`,
+    { headers: dbHdrs }
+  );
+  if (!ordersRes.ok) throw new Error(`Platform orders fetch failed: ${ordersRes.statusText}`);
+  const orders = (await ordersRes.json()) || [];
 
   // 3. Fetch latest payment / till status
-  const { data: latestPayments } = await supabase.from("payments")
-    .select("raw_payload, created_at")
-    .order("created_at", { ascending: false })
-    .limit(1);
+  const payRes = await fetch(`${SUPABASE_URL}/rest/v1/payments?select=raw_payload,created_at&order=created_at.desc&limit=1`, { headers: dbHdrs });
+  const latestPayments = (await payRes.json()) || [];
 
   const raw = latestPayments?.[0]?.raw_payload || {};
   const currentTillBalance = raw.balance != null ? Number(raw.balance) : null;
