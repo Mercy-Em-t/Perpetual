@@ -75,6 +75,10 @@ export async function handleStorefrontRoutes({
         const shopId = shop.id;
         const categories = Array.from(new Set((items || []).map(i => i.category).filter(Boolean))).sort();
 
+        // Check shop suspension state
+        const isSuspended = shop.is_active === false || shop.fulfillment_settings?.quality_suspension?.is_suspended === true;
+        const suspensionReason = shop.fulfillment_settings?.quality_suspension?.reason || "Under quality and operational review";
+
         // Enrich with live daily buyable pool from Order Guard
         const stockSummary = await sharedOrderGuard.getDailyStockSummary(shopId);
         const poolMap = new Map(stockSummary.items.map(s => [s.item_id.toLowerCase(), s]));
@@ -82,7 +86,7 @@ export async function handleStorefrontRoutes({
           const pool = poolMap.get(String(it.id).toLowerCase()) || poolMap.get(String(it.name).toLowerCase());
           return {
             ...it,
-            available_today: pool ? pool.available : null,
+            available_today: isSuspended ? 0 : (pool ? pool.available : null),
             daily_cap: pool ? pool.daily_cap : null,
             max_per_order: pool ? pool.max_per_order : null
           };
@@ -93,6 +97,8 @@ export async function handleStorefrontRoutes({
         return res.end(JSON.stringify({
           success: true,
           shop,
+          is_suspended: isSuspended,
+          suspension_reason: isSuspended ? suspensionReason : null,
           categories,
           items: enrichedItems,
           promotions: promotions || [],
@@ -134,6 +140,19 @@ export async function handleStorefrontRoutes({
           } catch (_) {}
         }
         const canonicalShopId = resolvedShop?.id || shop_id || shop_slug;
+
+        // Invariant Guard: Suspended or inactive shops cannot accept new orders
+        if (resolvedShop && (resolvedShop.is_active === false || resolvedShop.fulfillment_settings?.quality_suspension?.is_suspended === true)) {
+          const susReason = resolvedShop.fulfillment_settings?.quality_suspension?.reason || "Operational & Quality Review";
+          res.writeHead(403);
+          return res.end(JSON.stringify({
+            success: false,
+            decision: "REJECTED",
+            code: "SHOP_SUSPENDED",
+            can_show_payment: false,
+            error: `Store is temporarily closed for maintenance (${susReason}). New orders cannot be accepted.`
+          }));
+        }
 
         // Fetch authoritative menu_items prices from Supabase to prevent client price tampering
         const itemIds = items.map(i => i.id || i.item_id).filter(Boolean);

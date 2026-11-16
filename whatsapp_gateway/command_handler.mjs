@@ -30,7 +30,8 @@ import { formatPhoneToWhatsAppJid, getEatDateBoundaries } from "./eod_reconciler
 import {
   runMerchantInfractionAudit,
   suspendShopCatalog,
-  reinstateShopCatalog
+  reinstateShopCatalog,
+  submitMerchantRemediation
 } from "./merchant_infraction_sentinel.mjs";
 import {
   generateMorningDocketReport,
@@ -108,12 +109,27 @@ export async function handleInboundCommand(commandText, replyJid, senderId, safe
       return await handleShopListCommand(replyJid, context, safeSendMessage, args);
     }
 
-    // 3. On-The-Fly Group Onboarding & Linking (!shop bind <slug> [ops|mgmt]) or !shop list
+    // 3. On-The-Fly Group Onboarding & Linking (!shop bind <slug> [ops|mgmt]) or !shop list / suspend / reinstate
     if (command === "!shop" || command === "!bind") {
-      const firstArg = args.split(/\s+/)[0]?.toLowerCase();
+      const parts = args.trim().split(/\s+/);
+      const firstArg = parts[0]?.toLowerCase();
       if (firstArg === "list" || firstArg === "ls" || firstArg === "all") {
-        const subQuery = args.substring(firstArg.length).trim();
+        const subQuery = args.substring(parts[0].length).trim();
         return await handleShopListCommand(replyJid, context, safeSendMessage, subQuery);
+      }
+      if (firstArg === "suspend") {
+        const subArgs = args.substring(parts[0].length).trim();
+        return await handleSystemCommand("!suspend", subArgs, replyJid, senderId, callerName, context, safeSendMessage);
+      }
+      if (firstArg === "reinstate" || firstArg === "unsuspend") {
+        const subArgs = args.substring(parts[0].length).trim();
+        return await handleSystemCommand("!reinstate", subArgs, replyJid, senderId, callerName, context, safeSendMessage);
+      }
+      if (firstArg === "status") {
+        const subSlug = parts[1]?.toLowerCase();
+        if (subSlug) {
+          return await handleSystemCommand("!infractions", subSlug, replyJid, senderId, callerName, context, safeSendMessage);
+        }
       }
       return await handleShopBindCommand(args, replyJid, senderId, callerName, safeSendMessage);
     }
@@ -420,20 +436,95 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
         }
       }
 
-      const reply =
+      const sus = shop.fulfillment_settings?.quality_suspension;
+      const isSuspended = shop.is_active === false || sus?.is_suspended === true;
+
+      let reply =
         `🏪 *${shop.name} — Shop Vitals*\n` +
         `╭────────────────────────────────╮\n` +
-        `  • Status: *ACTIVE / OPEN*\n` +
+        `  • Status: *${isSuspended ? "🔴 SUSPENDED UNDER REVIEW" : "🟢 ACTIVE / OPEN"}*\n` +
         `  • Master Till: *${shop.mpesa_till_number || "Not Configured"}*\n` +
         `  • Open Orders in Queue: *${(inFlight || []).length}*\n` +
         `  • Settled Today: *KES ${todayRevenue.toLocaleString()}* (${todayPaidCount} orders)\n` +
-        `  • Support Phone: ${shop.phone || "None"}\n` +
+        `  • Support Phone: ${shop.phone || "None"}\n`;
+
+      if (isSuspended) {
+        reply +=
+          `  • Suspension Reason: _${sus?.reason || "Operational review"}_\n` +
+          `  • Remediation Status: *${sus?.remediation_submission?.status || "PENDING SUBMISSION"}*\n`;
+      }
+      reply +=
         `╰────────────────────────────────╯\n` +
+        (isSuspended ? `👉 _Type *!remediation submit <notes>* to submit corrective actions._\n` : "") +
         `_Channel: ${context.role === "MANAGEMENT" ? "Management Oversight" : "Floor Operations"}_`;
       await safeSendMessage(replyJid, { text: reply });
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Failed to fetch shop status: ${err.message}` });
+      return;
+    }
+  }
+
+  // 2b. Merchant Remediation Submission & Status: !remediation [submit <notes> | status]
+  if (command === "!remediation") {
+    const subCmd = (args || "").trim().split(/\s+/)[0]?.toLowerCase();
+    const notes = (args || "").trim().substring((subCmd || "").length).trim();
+
+    if (subCmd === "submit") {
+      if (!notes) {
+        await safeSendMessage(replyJid, {
+          text: `⚠️ *Usage:* \`!remediation submit <summary of fixes, restock and SLA actions taken>\``
+        });
+        return;
+      }
+      try {
+        const remRes = await submitMerchantRemediation(shop.slug, notes, callerName, senderId);
+        await safeSendMessage(replyJid, {
+          text: `📋 *[REMEDIATION PLAN SUBMITTED]*\n` +
+                `• Store: *${shop.name}* (\`${shop.slug}\`)\n` +
+                `• Submitted By: @${callerName}\n` +
+                `• Status: *UNDER REVIEW BY PLATFORM MANAGEMENT*\n\n` +
+                `_Our team will inspect your inventory and unfulfilled orders. Once verified, your catalog will be reinstated._`
+        });
+
+        if (GROUPS?.general?.jid) {
+          await safeSendMessage(GROUPS.general.jid, {
+            text: `🚨 *[MERCHANT REMEDIATION SUBMITTED — ACTION REQUIRED]*\n` +
+                  `• Store: *${shop.name}* (\`${shop.slug}\`)\n` +
+                  `• Submitted By: @${callerName} (\`${senderId}\`)\n` +
+                  `• Plan Details: _${notes}_\n\n` +
+                  `👉 *To reinstate store:* \`!reinstate ${shop.slug} ${notes.slice(0, 30)}...\``
+          }).catch(() => {});
+        }
+        return;
+      } catch (err) {
+        await safeSendMessage(replyJid, { text: `❌ Failed to submit remediation: ${err.message}` });
+        return;
+      }
+    } else {
+      // Remediation Status
+      const sus = shop.fulfillment_settings?.quality_suspension;
+      const isSuspended = shop.is_active === false || sus?.is_suspended === true;
+      let msg = `📋 *[REMEDIATION & SLA STATUS: ${shop.name}]*\n`;
+      msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      msg += `• Storefront Status: ${isSuspended ? "🔴 *SUSPENDED*" : "🟢 *ACTIVE*"}\n`;
+      if (isSuspended) {
+        msg += `• Reason: _${sus?.reason || "Quality SLA review"}_\n`;
+        msg += `• Suspended At: ${sus?.suspended_at ? new Date(sus.suspended_at).toLocaleString("en-GB", { timeZone: "Africa/Nairobi" }) : "Recent"}\n`;
+        if (sus?.remediation_submission) {
+          msg += `• Remediation Submission: *${sus.remediation_submission.status}*\n`;
+          msg += `• Submitted Notes: _${sus.remediation_submission.notes}_\n`;
+        } else {
+          msg += `\n📋 *MANDATORY GATES:*\n` +
+                 `1. Clear unfulfilled cancellations.\n` +
+                 `2. Audit daily physical stock limits.\n` +
+                 `3. Re-commit to 25-min prep SLA.\n\n` +
+                 `👉 *To submit plan:* \`!remediation submit <notes>\``;
+        }
+      } else {
+        msg += `• Store is operating normally with zero open quality suspensions.\n`;
+      }
+      await safeSendMessage(replyJid, { text: msg });
       return;
     }
   }
@@ -2034,8 +2125,42 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
     try {
       const res = await suspendShopCatalog(shopSlug, reason, callerName || "ExecutiveOversight");
       await safeSendMessage(replyJid, {
-        text: `🛑 *[MERCHANT CATALOG SUSPENDED]*\n• Store: *${res.shopName}* (\`${res.shopSlug}\`)\n• Status: *INACTIVE* 🔴\n• Reason: _${reason}_\n• Action: Storefront hidden under quality review.\n_To reinstate:_ \`!reinstate ${res.shopSlug} <reason>\``
+        text: `🛑 *[MERCHANT CATALOG SUSPENDED]*\n` +
+              `• Store: *${res.shopName}* (\`${res.shopSlug}\`)\n` +
+              `• Status: *INACTIVE* 🔴\n` +
+              `• Reason: _${reason}_\n` +
+              `• Action: Storefront hidden & checkouts blocked under quality review.\n\n` +
+              `👉 _To reinstate:_ \`!reinstate ${res.shopSlug} <reason>\``
       });
+
+      // Formal Suspension Notice to Merchant Channels
+      const merchantNotice =
+        `🛑 *[OFFICIAL NOTICE: STOREFRONT TEMPORARILY SUSPENDED]*\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `• Store: *${res.shopName}* (\`${res.shopSlug}\`)\n` +
+        `• Status: *SUSPENDED FROM PUBLIC ORDERING* 🔴\n` +
+        `• Reason: _${reason}_\n` +
+        `• Action Taken: Storefront checkout blocked & buyable stock hidden.\n\n` +
+        `📋 *MANDATORY REMEDIATION CHECKLIST:*\n` +
+        `1. Resolve Unfulfilled Orders: Clear all customer refund claims or issue replacement vouchers.\n` +
+        `2. Inventory Audit: Update physical stock daily caps to prevent stockouts.\n` +
+        `3. SLA Re-Commitment: Re-confirm kitchen readiness for our 25-minute prep SLA.\n\n` +
+        `👉 *HOW TO REQUEST REINSTATEMENT:*\n` +
+        `Once actions are complete, reply in this group with:\n` +
+        `\`!remediation submit <summary of fixes and inventory adjustments>\`\n` +
+        `_Our governance desk will audit and unblock your storefront._`;
+
+      for (const targetJid of res.targetJids || []) {
+        if (targetJid !== replyJid) {
+          await safeSendMessage(targetJid, { text: merchantNotice }).catch(() => {});
+        }
+      }
+
+      if (GROUPS?.general?.jid && replyJid !== GROUPS.general.jid) {
+        await safeSendMessage(GROUPS.general.jid, {
+          text: `📢 *[PLATFORM AUDIT] Store ${res.shopName} (\`${res.shopSlug}\`) was SUSPENDED by @${callerName}. Reason: ${reason}*`
+        }).catch(() => {});
+      }
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Failed to suspend shop: ${err.message}` });
@@ -2054,8 +2179,36 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
     try {
       const res = await reinstateShopCatalog(shopSlug, reason, callerName || "ExecutiveOversight");
       await safeSendMessage(replyJid, {
-        text: `🟢 *[MERCHANT CATALOG REINSTATED]*\n• Store: *${res.shopName}* (\`${res.shopSlug}\`)\n• Status: *ACTIVE* 🟢\n• Reason: _${reason}_\n• Catalog is now live for orders.`
+        text: `🟢 *[MERCHANT CATALOG REINSTATED]*\n` +
+              `• Store: *${res.shopName}* (\`${res.shopSlug}\`)\n` +
+              `• Status: *ACTIVE* 🟢\n` +
+              `• Approved By: @${callerName}\n` +
+              `• Reason: _${reason}_\n` +
+              `• Catalog is now live for public customer checkouts.`
       });
+
+      // Welcome Back Alert to Merchant Channels
+      const merchantWelcome =
+        `🎉 *[STORE CATALOG REINSTATED — WELCOME BACK!]*\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `• Store: *${res.shopName}* (\`${res.shopSlug}\`)\n` +
+        `• Status: *LIVE & ACTIVE* 🟢\n` +
+        `• Approved By: @${callerName}\n` +
+        `• Review Notes: _${reason}_\n\n` +
+        `✅ Your online catalog has been re-enabled and is now actively accepting customer checkouts.\n` +
+        `_Wishing you great sales and smooth operations today!_`;
+
+      for (const targetJid of res.targetJids || []) {
+        if (targetJid !== replyJid) {
+          await safeSendMessage(targetJid, { text: merchantWelcome }).catch(() => {});
+        }
+      }
+
+      if (GROUPS?.general?.jid && replyJid !== GROUPS.general.jid) {
+        await safeSendMessage(GROUPS.general.jid, {
+          text: `📢 *[PLATFORM AUDIT] Store ${res.shopName} (\`${res.shopSlug}\`) was REINSTATED by @${callerName}. Notes: ${reason}*`
+        }).catch(() => {});
+      }
       return;
     } catch (err) {
       await safeSendMessage(replyJid, { text: `❌ Failed to reinstate shop: ${err.message}` });
@@ -2121,6 +2274,14 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
 // TIER 3: DIRECT MESSAGE (1-ON-1 CUSTOMER / STAFF ASSISTANT)
 // =============================================================================
 async function handleDirectMessageCommand(command, args, replyJid, senderId, callerName, safeSendMessage) {
+  // Executive DM Passthrough: Allow platform admins to execute executive governance commands from private DM
+  const cleanSender = String(senderId).replace(/@.*$/, "").replace(/[^0-9]/g, "");
+  const isPlatformAdmin = cleanSender === "254710720949" || cleanSender.endsWith("710720949");
+  const adminAllowed = ["!suspend", "!reinstate", "!infractions", "!docket", "!backup", "!settle", "!summary", "!second", "!cancel"];
+  if (isPlatformAdmin && adminAllowed.includes(command)) {
+    return await handleSystemCommand(command, args, replyJid, senderId, callerName, { tier: "SYSTEM", role: "EXECUTIVE" }, safeSendMessage);
+  }
+
   if (command === "!help") {
     await safeSendMessage(replyJid, {
       text: `👋 Hello! I am your Savannah shopping & delivery assistant.\n\n` +

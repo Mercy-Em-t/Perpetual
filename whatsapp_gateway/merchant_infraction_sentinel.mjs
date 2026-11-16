@@ -288,6 +288,7 @@ export async function suspendShopCatalog(shopIdOrSlug, reason = "Quality SLA Inf
     headers: { ...dbHdrs, "Prefer": "return=minimal" },
     body: JSON.stringify({
       is_active: false,
+      is_online: false,
       fulfillment_settings: updatedSettings
     })
   });
@@ -306,7 +307,14 @@ export async function suspendShopCatalog(shopIdOrSlug, reason = "Quality SLA Inf
     shopName: matched.name,
     shopSlug: matched.slug,
     is_active: false,
-    reason
+    reason,
+    merchantSettings: updatedSettings,
+    targetJids: [
+      currentSettings.whatsapp_routing?.operations_jid,
+      currentSettings.whatsapp_routing?.management_jid,
+      currentSettings.whatsapp_routing?.owner_phone ? (currentSettings.whatsapp_routing.owner_phone.includes("@") ? currentSettings.whatsapp_routing.owner_phone : `${currentSettings.whatsapp_routing.owner_phone.replace(/[^0-9]/g, "")}@s.whatsapp.net`) : null,
+      matched.whatsapp_number ? `${matched.whatsapp_number.replace(/[^0-9]/g, "")}@s.whatsapp.net` : null
+    ].filter(Boolean)
   };
 }
 
@@ -337,6 +345,7 @@ export async function reinstateShopCatalog(shopIdOrSlug, reason = "Management re
     headers: { ...dbHdrs, "Prefer": "return=minimal" },
     body: JSON.stringify({
       is_active: true,
+      is_online: true,
       fulfillment_settings: updatedSettings
     })
   });
@@ -355,6 +364,66 @@ export async function reinstateShopCatalog(shopIdOrSlug, reason = "Management re
     shopName: matched.name,
     shopSlug: matched.slug,
     is_active: true,
-    reason
+    reason,
+    merchantSettings: updatedSettings,
+    targetJids: [
+      currentSettings.whatsapp_routing?.operations_jid,
+      currentSettings.whatsapp_routing?.management_jid,
+      currentSettings.whatsapp_routing?.owner_phone ? (currentSettings.whatsapp_routing.owner_phone.includes("@") ? currentSettings.whatsapp_routing.owner_phone : `${currentSettings.whatsapp_routing.owner_phone.replace(/[^0-9]/g, "")}@s.whatsapp.net`) : null,
+      matched.whatsapp_number ? `${matched.whatsapp_number.replace(/[^0-9]/g, "")}@s.whatsapp.net` : null
+    ].filter(Boolean)
+  };
+}
+
+/**
+ * Records merchant remediation notes submitted by merchant operator
+ */
+export async function submitMerchantRemediation(shopIdOrSlug, notes = "", actorName = "Merchant", senderId = "") {
+  const allShops = await getAllShops(true);
+  const matched = allShops.find(s => s.id === shopIdOrSlug || s.slug?.toLowerCase() === shopIdOrSlug.toLowerCase());
+
+  if (!matched) {
+    throw new Error(`Shop "${shopIdOrSlug}" not found.`);
+  }
+
+  const currentSettings = matched.fulfillment_settings || {};
+  const suspensionInfo = currentSettings.quality_suspension || { is_suspended: !matched.is_active };
+
+  const updatedSettings = {
+    ...currentSettings,
+    quality_suspension: {
+      ...suspensionInfo,
+      remediation_submission: {
+        submitted_at: new Date().toISOString(),
+        submitted_by: senderId,
+        actor_name: actorName,
+        notes,
+        status: "PENDING_MANAGER_REVIEW"
+      }
+    }
+  };
+
+  const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/shops?id=eq.${matched.id}`, {
+    method: "PATCH",
+    headers: { ...dbHdrs, "Prefer": "return=minimal" },
+    body: JSON.stringify({
+      fulfillment_settings: updatedSettings
+    })
+  });
+
+  if (!patchRes.ok) {
+    const errText = await patchRes.text().catch(() => "");
+    throw new Error(`Failed to submit remediation: ${errText}`);
+  }
+
+  await getAllShops(true);
+
+  return {
+    success: true,
+    shopId: matched.id,
+    shopName: matched.name,
+    shopSlug: matched.slug,
+    notes,
+    actorName
   };
 }

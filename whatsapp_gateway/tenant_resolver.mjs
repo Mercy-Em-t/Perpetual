@@ -23,7 +23,7 @@ export async function getAllShops(forceRefresh = false) {
     return shopsCache;
   }
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/shops?select=id,name,slug,mpesa_till_number,phone,whatsapp_number,fulfillment_settings`, { headers: hdrs });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/shops?select=id,name,slug,is_active,mpesa_till_number,phone,whatsapp_number,fulfillment_settings`, { headers: hdrs });
     if (!res.ok) throw new Error(`Supabase error: ${res.statusText}`);
     const data = await res.json();
     shopsCache = Array.isArray(data) ? data : [];
