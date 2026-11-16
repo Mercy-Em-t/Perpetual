@@ -36,3 +36,6 @@ Thumbs.db
 # Runtime Gateway & Order Guard State
 order_guard_state.json
 whatsapp_gateway/data/
+
+backups/
+fix_server.py
