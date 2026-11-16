@@ -44,4 +44,24 @@ test("Cadence Daemon: Evaluates all forced trigger actions cleanly", async () =>
   assert.equal(resWeekly.executed[0].key, "weeklyTuesday");
   assert.equal(resWeekly.executed[0].success, true);
   assert.ok(sentMessages[2].text.includes("PLATFORM DOCKET: WEEKLY TUESDAY GOVERNANCE AUDIT"));
+
+  // Test 2-day pre-monthly reminder force trigger
+  const resPreMonthly = await evaluateCadenceTriggers({
+    safeSendMessage: mockSend,
+    forceTrigger: "pre-monthly"
+  });
+  assert.equal(resPreMonthly.executed.length, 1);
+  assert.equal(resPreMonthly.executed[0].key, "preMonthlyReminder");
+  assert.equal(resPreMonthly.executed[0].success, true);
+  assert.ok(sentMessages[3].text.includes("2 DAYS TO MONTHLY DATE WITH THE SYSTEM"));
+
+  // Test 2-day pre-annual reminder force trigger
+  const resPreAnnual = await evaluateCadenceTriggers({
+    safeSendMessage: mockSend,
+    forceTrigger: "pre-annual"
+  });
+  assert.equal(resPreAnnual.executed.length, 1);
+  assert.equal(resPreAnnual.executed[0].key, "preAnnualReminder");
+  assert.equal(resPreAnnual.executed[0].success, true);
+  assert.ok(sentMessages[4].text.includes("2 DAYS TO ANNUAL DATE WITH THE SYSTEM"));
 });

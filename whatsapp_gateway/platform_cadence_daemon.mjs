@@ -35,7 +35,9 @@ const lastDispatched = {
   lunch: null,
   eod: null,
   weeklyTuesday: null,
-  monthlyFirst: null
+  monthlyFirst: null,
+  preMonthlyReminder: null,
+  preAnnualReminder: null
 };
 
 /**
@@ -180,6 +182,67 @@ export async function evaluateCadenceTriggers({
     } catch (err) {
       console.error("[CADENCE DAEMON] Monthly docket dispatch error:", err.message);
       executed.push({ key: "monthlyFirst", success: false, error: err.message });
+    }
+  }
+
+  // 7. 2 Days to Monthly Date with the System (09:00 AM EAT on day N-1 where N = total days in month)
+  const daysInCurrentMonth = new Date(eat.year, eat.month, 0).getDate();
+  const isTwoDaysToFirst = eat.day === (daysInCurrentMonth - 1);
+  if ((isTwoDaysToFirst && eat.hour === 9 && eat.minute >= 0 && eat.minute < 5 && canDispatch("preMonthlyReminder")) || forceTrigger === "pre-monthly") {
+    try {
+      console.log(`[CADENCE DAEMON] Dispatching 2-Day Pre-Monthly Reminder (${eat.dateKey})...`);
+      const preMonthlyCard =
+        `📅 *[PLATFORM REMINDER: 2 DAYS TO MONTHLY DATE WITH THE SYSTEM]*\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `• Session: *Monthly Platform & Merchant Review*\n` +
+        `• When: *1st of Next Month at 09:00 AM EAT*\n` +
+        `• Calendar Status: *Blocked on Google Calendar* 🗓️\n\n` +
+        `📋 *PRE-SESSION AGENDA TO PREPARE:*\n` +
+        `1. Plan A SaaS subscription invoicing & auto-netting (KES 3,500/store)\n` +
+        `2. Generate & audit Monthly Merchant Statements of Account (PDF/CSV)\n` +
+        `3. Review Cloudflare bandwidth logs & Tailscale node telemetry\n` +
+        `4. Rolling 7-day reserve reconciliation & dispute chargeback sign-off\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `👉 _Please protect this focused block in your schedule._`;
+
+      if (safeSendMessage && targetOversightJid) {
+        await safeSendMessage(targetOversightJid, { text: preMonthlyCard });
+      }
+      markDispatched("preMonthlyReminder");
+      executed.push({ key: "preMonthlyReminder", success: true });
+    } catch (err) {
+      console.error("[CADENCE DAEMON] Pre-monthly reminder error:", err.message);
+      executed.push({ key: "preMonthlyReminder", success: false, error: err.message });
+    }
+  }
+
+  // 8. 2 Days to Annual Strategic Review (09:00 AM EAT on December 13)
+  const isTwoDaysToAnnual = (eat.month === 12 && eat.day === 13);
+  if ((isTwoDaysToAnnual && eat.hour === 9 && eat.minute >= 0 && eat.minute < 5 && canDispatch("preAnnualReminder")) || forceTrigger === "pre-annual") {
+    try {
+      console.log(`[CADENCE DAEMON] Dispatching 2-Day Pre-Annual Reminder (${eat.dateKey})...`);
+      const preAnnualCard =
+        `🏆 *[PLATFORM REMINDER: 2 DAYS TO ANNUAL DATE WITH THE SYSTEM]*\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `• Session: *Annual Platform Strategy & Infrastructure Audit*\n` +
+        `• When: *December 15 at 09:00 AM – 13:00 PM EAT*\n` +
+        `• Calendar Status: *Blocked on Google Calendar* 🗓️\n\n` +
+        `📋 *ANNUAL EXECUTIVE AUDIT ITEMS:*\n` +
+        `1. Merchant contract recertification & KYC permit/KRA compliance\n` +
+        `2. Annual commercial SLA, commission structure & tariff review\n` +
+        `3. Full disaster recovery drill & PostgreSQL multi-region snapshot test\n` +
+        `4. Platform Gross Merchandise Value (GMV) & tax withholding audit\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `👉 _4-hour executive block reserved. Please clear external meetings._`;
+
+      if (safeSendMessage && targetOversightJid) {
+        await safeSendMessage(targetOversightJid, { text: preAnnualCard });
+      }
+      markDispatched("preAnnualReminder");
+      executed.push({ key: "preAnnualReminder", success: true });
+    } catch (err) {
+      console.error("[CADENCE DAEMON] Pre-annual reminder error:", err.message);
+      executed.push({ key: "preAnnualReminder", success: false, error: err.message });
     }
   }
 
