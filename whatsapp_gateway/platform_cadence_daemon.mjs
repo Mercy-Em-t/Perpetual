@@ -74,6 +74,10 @@ const alertedStalledOrders = new Set();
 /**
  * Checks for orders that have sat in PAID state for >15 minutes without moving to PREPARING
  */
+/**
+ * Checks for orders that have sat in PAID state for >15 minutes without moving to PREPARING/DISPATCHED.
+ * Batches all pending orders into a single consolidated notification to prevent multiple rapid alerts.
+ */
 async function checkStalledKitchenOrders(safeSendMessage, targetJid) {
   if (!safeSendMessage || !targetJid) return;
   try {
@@ -88,10 +92,14 @@ async function checkStalledKitchenOrders(safeSendMessage, targetJid) {
     const stalled = await res.json();
     if (!Array.isArray(stalled) || stalled.length === 0) return;
 
-    for (const order of stalled) {
-      if (alertedStalledOrders.has(order.id)) continue;
-      alertedStalledOrders.add(order.id);
+    const unalerted = stalled.filter(o => !alertedStalledOrders.has(o.id));
+    if (unalerted.length === 0) return;
 
+    // Mark as alerted
+    unalerted.forEach(o => alertedStalledOrders.add(o.id));
+
+    if (unalerted.length === 1) {
+      const order = unalerted[0];
       const elapsedMins = Math.round((Date.now() - new Date(order.created_at).getTime()) / 60000);
       const shortId = order.id.slice(0, 8).toUpperCase();
       const stallMsg =
@@ -104,9 +112,29 @@ async function checkStalledKitchenOrders(safeSendMessage, targetJid) {
         `• Risk: Customer waiting without kitchen prep\n` +
         `• Probable Cause: Kitchen phone offline, muted, or Wi-Fi blackout (KPLC factor)\n\n` +
         `⚡ *IMMEDIATE ACTION*\n` +
-        `• Call merchant directly or run: \`!prep ${shortId}\``;
+        `• Call merchant directly or run: \`!dispatch ${shortId} [rider]\``;
 
       await safeSendMessage(targetJid, { text: stallMsg }).catch(() => {});
+    } else {
+      // Consolidate multiple stalled orders into ONE single scannable notification
+      let batchMsg =
+        `⚠️ *KITCHEN STALL ALERT: ${unalerted.length} ORDERS UNACKNOWLEDGED*\n\n` +
+        `📦 *FLAGGED ORDERS WAITING FOR PREP*\n`;
+
+      unalerted.forEach(order => {
+        const elapsedMins = Math.round((Date.now() - new Date(order.created_at).getTime()) / 60000);
+        const shortId = order.id.slice(0, 8).toUpperCase();
+        batchMsg += `• Order *#${shortId}* (KES ${Number(order.total_price || 0).toLocaleString()}) — ${order.client_name || "Customer"} (${elapsedMins}m in PAID)\n`;
+      });
+
+      batchMsg += `\n🚨 *DIAGNOSTIC & RISK*\n` +
+                  `• Risk: Orders paid but kitchen has not acknowledged or dispatched\n` +
+                  `• Probable Cause: Merchant device offline, muted, or power/Wi-Fi blackout\n\n` +
+                  `⚡ *IMMEDIATE ACTIONS*\n` +
+                  `• Dispatch order: \`!dispatch <order_id> [rider]\`\n` +
+                  `• Complete order: \`!confirm <order_id>\``;
+
+      await safeSendMessage(targetJid, { text: batchMsg }).catch(() => {});
     }
   } catch (err) {
     // Non-blocking telemetry check
