@@ -92,7 +92,7 @@ export async function generateMorningDocketReport({ targetDate = new Date() } = 
     monthlyFee: Number(s.fulfillment_settings?.billing?.monthly_fee || 3500)
   }));
 
-  // 6. Construct Dynamic Action Card
+  // 6. Construct Dynamic Action Card with Airy Formatting & Clear Whitespace
   const formattedEAT = new Date().toLocaleString("en-GB", {
     timeZone: "Africa/Nairobi",
     day: "numeric",
@@ -101,12 +101,16 @@ export async function generateMorningDocketReport({ targetDate = new Date() } = 
     minute: "2-digit"
   });
 
-  let card = `📋 *[PLATFORM DOCKET: 06:30 AM OVERNIGHT RECONCILIATION]*\n`;
-  card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  card += `• Audit Timestamp: *${formattedEAT} EAT*\n`;
-  card += `• Overnight Orders: *${settledOrders.length} Settled* | *KES ${overnightGmv.toLocaleString("en-US", { minimumFractionDigits: 2 })} GMV*\n`;
-  card += `• Ghost Payment Queue: *${enrichedUnseconded.length > 0 ? `${enrichedUnseconded.length} Flagged Unseconded` : "0 Flagged (Zero Ghosts ✅)"}*\n`;
-  card += `• Quality Infractions: *${breaches.length > 0 ? `${breaches.length} Critical Breaches` : warnings.length > 0 ? `${warnings.length} Store Warnings` : "0 Breaches (All Compliant ✅)"}*\n`;
+  let card = `📋 *PLATFORM DOCKET: 06:30 AM OVERNIGHT RECONCILIATION*\n`;
+  card += `_Audit: ${formattedEAT} EAT_\n\n`;
+
+  card += `📊 *OVERNIGHT ACTIVITY*\n`;
+  card += `• Orders: *${settledOrders.length} Settled*\n`;
+  card += `• Gross Revenue: *KES ${overnightGmv.toLocaleString("en-US", { minimumFractionDigits: 2 })} GMV*\n\n`;
+
+  card += `🛡️ *OPERATIONAL HEALTH*\n`;
+  card += `• Ghost Payments: *${enrichedUnseconded.length > 0 ? `⚠️ ${enrichedUnseconded.length} Flagged Unseconded` : "0 Flagged (Zero Ghosts ✅)"}*\n`;
+  card += `• Quality Infractions: *${breaches.length > 0 ? `🔴 ${breaches.length} Critical Breaches` : warnings.length > 0 ? `🟡 ${warnings.length} Store Warnings` : "0 Breaches (All Compliant ✅)"}*\n`;
   if (renewalsDueToday.length > 0) {
     card += `• Subscriptions Due Today: *${renewalsDueToday.length} Stores*\n`;
   }
@@ -115,84 +119,77 @@ export async function generateMorningDocketReport({ targetDate = new Date() } = 
   const hasPendingActions = enrichedUnseconded.length > 0 || breaches.length > 0 || warnings.length > 0 || renewalsDueToday.length > 0;
 
   if (hasPendingActions) {
-    card += `⚠️ *ACTION REQUIRED:*\n`;
+    card += `⚠️ *ACTION REQUIRED*\n\n`;
     let actionIndex = 1;
 
     // Unseconded items
     if (enrichedUnseconded.length > 0) {
-      card += `${actionIndex++}. *Unseconded Till Payments (${enrichedUnseconded.length}):*\n`;
+      card += `*${actionIndex++}. Unseconded Till Payments (${enrichedUnseconded.length})*\n`;
       enrichedUnseconded.forEach(u => {
-        card += `   • Order *#${u.shortId}* (KES ${u.amount.toLocaleString()}) — Claimed M-Pesa: \`${u.claimedCode}\`\n`;
-        card += `     _Store:_ ${u.shopName} | _Customer:_ ${u.customer} (${u.elapsedMins}m ago)\n`;
-        card += `     _Status:_ Awaiting physical Till verification\n`;
+        card += `   • Order: *#${u.shortId}* (KES ${u.amount.toLocaleString()})\n`;
+        card += `     _Store:_ ${u.shopName} | _Customer:_ ${u.customer}\n`;
+        card += `     _Claimed M-Pesa:_ \`${u.claimedCode}\` (${u.elapsedMins}m ago)\n\n`;
       });
-      card += `\n`;
     }
 
     // Infractions
     if (breaches.length > 0) {
-      card += `${actionIndex++}. *Critical SLA Infractions (${breaches.length}):*\n`;
+      card += `*${actionIndex++}. Critical SLA Infractions (${breaches.length})*\n`;
       breaches.forEach(b => {
         card += `   • Store: *${b.shopName}* (\`${b.shopSlug}\`)\n`;
-        card += `     _Infraction:_ ${b.unfulfilled7dCount} unfulfilled cancellations in 7 days (Threshold: ≥ 3)\n`;
-        card += `     _Risk Level:_ 🔴 CRITICAL (Immediate 24h catalog suspension recommended)\n`;
+        card += `     _Breach:_ ${b.unfulfilled7dCount} unfulfilled cancellations in 7 days (Limit: 3)\n`;
+        card += `     _Risk:_ 🔴 CRITICAL (Catalog suspension recommended)\n\n`;
       });
-      card += `\n`;
     }
 
     if (warnings.length > 0) {
-      card += `${actionIndex++}. *Approaching SLA Threshold (${warnings.length}):*\n`;
+      card += `*${actionIndex++}. Approaching SLA Limit (${warnings.length})*\n`;
       warnings.forEach(w => {
         card += `   • Store: *${w.shopName}* (\`${w.shopSlug}\`)\n`;
         card += `     _Warning:_ ${w.unfulfilled7dCount} / 3 unfulfilled cancellations in 7 days\n`;
-        card += `     _Risk Level:_ 🟡 WARNING (1 more triggers catalog suspension)\n`;
+        card += `     _Risk:_ 🟡 WARNING (1 more triggers suspension)\n\n`;
       });
-      card += `\n`;
     }
 
     // Subscriptions
     if (renewalsDueToday.length > 0) {
-      card += `${actionIndex++}. *SaaS Plan A Renewals Due Today (${renewalsDueToday.length}):*\n`;
+      card += `*${actionIndex++}. Plan A SaaS Renewals Due Today (${renewalsDueToday.length})*\n`;
       renewalsDueToday.forEach(r => {
         card += `   • Store: *${r.shopName}* (\`${r.shopSlug}\`) — *KES ${r.monthlyFee.toLocaleString()}*\n`;
-        card += `     _Action:_ Auto-net off from today's settlements or invoice via M-Pesa.\n`;
+        card += `     _Action:_ Auto-net off from today's settlements or invoice via M-Pesa.\n\n`;
       });
-      card += `\n`;
     }
 
-    card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    card += `👉 *WHAT TO SUBMIT BACK TO THE SYSTEM:*\n`;
+    card += `⚡ *WHAT TO SUBMIT BACK*\n`;
 
     if (enrichedUnseconded.length > 0) {
       const firstU = enrichedUnseconded[0];
-      card += `• If M-Pesa verified on Till: \`!second ${firstU.shortId.toLowerCase()} ${firstU.claimedCode}\`\n`;
-      card += `• If fraudulent claim: \`!cancel ${firstU.shortId.toLowerCase()} Invalid M-Pesa code\`\n`;
+      card += `• Verify payment: \`!second ${firstU.shortId.toLowerCase()} ${firstU.claimedCode}\`\n`;
+      card += `• Reject claim: \`!cancel ${firstU.shortId.toLowerCase()} Invalid M-Pesa code\`\n`;
     }
 
     if (breaches.length > 0) {
       const firstB = breaches[0];
-      card += `• To suspend breached catalog: \`!suspend ${firstB.shopSlug} 3 unfulfilled orders\`\n`;
-      card += `• To review store: \`!infractions ${firstB.shopSlug}\`\n`;
+      card += `• Suspend catalog: \`!suspend ${firstB.shopSlug} 3 unfulfilled orders\`\n`;
+      card += `• Review store: \`!infractions ${firstB.shopSlug}\`\n`;
     } else if (warnings.length > 0) {
       const firstW = warnings[0];
-      card += `• To review store: \`!infractions ${firstW.shopSlug}\`\n`;
+      card += `• Review store: \`!infractions ${firstW.shopSlug}\`\n`;
     }
 
     if (renewalsDueToday.length > 0) {
       const firstR = renewalsDueToday[0];
-      card += `• To bill/deduct subscription: \`!bill deduct ${firstR.shopSlug} ${firstR.monthlyFee}\`\n`;
+      card += `• Deduct subscription: \`!bill deduct ${firstR.shopSlug} ${firstR.monthlyFee}\`\n`;
     }
   } else {
-    card += `✅ *STATUS: ALL SYSTEMS NORMAL*\n`;
+    card += `🟢 *STATUS: ALL SYSTEMS NORMAL*\n`;
     card += `• Zero unseconded payments in queue.\n`;
-    card += `• All merchant operational SLAs fully compliant.\n`;
-    card += `• Zero subscription renewals due today.\n`;
+    card += `• All merchant operational SLAs compliant.\n`;
     card += `• No administrative manual action required at this hour.\n\n`;
-    card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    card += `👉 *COMMAND SHORTCUTS:*\n`;
-    card += `• Platform Vitals: \`!status\`\n`;
-    card += `• All Stores SLA Sweep: \`!infractions all\`\n`;
-    card += `• B2C Settlement Readiness: \`!docket settle\``;
+    card += `⚡ *COMMAND SHORTCUTS*\n`;
+    card += `• \`!status\` — Platform vitals\n`;
+    card += `• \`!infractions all\` — Store SLA sweep\n`;
+    card += `• \`!docket settle\` — Preview 09:15 AM payout schedule`;
   }
 
   return {
@@ -276,55 +273,53 @@ export async function generateSettlementDocketReport() {
     minute: "2-digit"
   });
 
-  let card = `💰 *[PLATFORM DOCKET: 09:15 AM B2C NET SETTLEMENTS]*\n`;
-  card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  card += `• Audit Timestamp: *${formattedEAT} EAT*\n`;
-  card += `• Settlement Cycle: *T+1 (Sales Date: ${yDateStr})*\n`;
-  card += `• Total Net Payout Pool: *KES ${totalPlatformPayout.toLocaleString("en-US", { minimumFractionDigits: 2 })}*\n`;
-  card += `• Merchants Ready (>= KES 500): *${eligiblePayouts.length}*\n`;
+  let card = `💰 *PLATFORM DOCKET: 09:15 AM B2C NET SETTLEMENTS*\n`;
+  card += `_Settlement Cycle: T+1 (${yDateStr}) • Audit: ${formattedEAT} EAT_\n\n`;
+
+  card += `📊 *TREASURY OVERVIEW*\n`;
+  card += `• Net Payout Pool: *KES ${totalPlatformPayout.toLocaleString("en-US", { minimumFractionDigits: 2 })}*\n`;
+  card += `• Merchants Ready (≥ KES 500): *${eligiblePayouts.length} Stores*\n`;
   if (rolledOverPayouts.length > 0) {
-    card += `• Rolled Over (< KES 500 Floor): *${rolledOverPayouts.length} Merchants*\n`;
+    card += `• Rolled Over (< KES 500): *${rolledOverPayouts.length} Stores*\n`;
   }
   card += `\n`;
 
   if (eligiblePayouts.length > 0) {
-    card += `📋 *READY FOR DISBURSEMENT:*\n`;
+    card += `📋 *READY FOR DISBURSEMENT*\n\n`;
     eligiblePayouts.forEach((s, i) => {
-      card += `${i + 1}. *${s.shopName}* (\`${s.shopSlug}\`)\n`;
+      card += `*${i + 1}. ${s.shopName}* (\`${s.shopSlug}\`)\n`;
       card += `   • Net Payout: *KES ${s.netPayout.toLocaleString("en-US", { minimumFractionDigits: 2 })}*\n`;
       card += `   • Gross Sales: KES ${s.grossSales.toLocaleString()} (${s.orderCount} orders)\n`;
-      card += `   • Platform Fee (${s.commissionPercent}%): -KES ${s.commissionDeduction.toFixed(0)} | Reserve: -KES ${s.reserveHold.toFixed(0)}\n`;
-      card += `   • Recipient Phone: \`${s.phone}\`\n\n`;
+      card += `   • Deductions: Fee (${s.commissionPercent}%): -KES ${s.commissionDeduction.toFixed(0)} | Reserve: -KES ${s.reserveHold.toFixed(0)}\n`;
+      card += `   • Phone: \`${s.phone}\`\n\n`;
     });
   }
 
   if (rolledOverPayouts.length > 0) {
-    card += `⏸️ *ROLLED OVER (BELOW KES 500 THRESHOLD):*\n`;
-    rolledOverPayouts.forEach((s, i) => {
-      card += `• *${s.shopName}* (\`${s.shopSlug}\`): Net *KES ${s.netPayout.toLocaleString("en-US", { minimumFractionDigits: 2 })}* (Rolled over to avoid M-Pesa tariff erosion)\n`;
+    card += `⏸️ *ROLLED OVER (< KES 500 THRESHOLD)*\n`;
+    rolledOverPayouts.forEach(s => {
+      card += `• *${s.shopName}* (\`${s.shopSlug}\`): Net *KES ${s.netPayout.toLocaleString("en-US", { minimumFractionDigits: 2 })}*\n`;
+      card += `  _(Rolled over to avoid M-Pesa tariff erosion)_\n`;
     });
     card += `\n`;
   }
 
   if (eligiblePayouts.length > 0) {
-    card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    card += `👉 *WHAT TO SUBMIT BACK TO THE SYSTEM:*\n`;
+    card += `⚡ *WHAT TO SUBMIT BACK*\n`;
     card += `• Export M-Pesa CSV batch: \`!settle export\`\n`;
-    card += `• Mark internal settlement ledger paid: \`!settle approve all\`\n`;
+    card += `• Mark internal ledger paid: \`!settle approve all\`\n`;
     const topShop = eligiblePayouts[0];
     card += `• Settle single merchant: \`!settle approve ${topShop.shopSlug}\`\n`;
-    card += `• Hold settlement for review: \`!settle hold ${topShop.shopSlug} [reason]\``;
+    card += `• Hold payout for review: \`!settle hold ${topShop.shopSlug} [reason]\``;
   } else if (rolledOverPayouts.length > 0) {
-    card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    card += `ℹ️ *All current shop balances are below KES 500 and will roll over to the next T+1 cycle automatically.*`;
+    card += `ℹ️ _All store balances are currently below KES 500 and will roll over automatically._`;
   } else {
-    card += `✅ *STATUS: ZERO SETTLEMENTS DUE*\n`;
-    card += `• No unreleased T+1 merchant sales recorded for ${yDateStr}.\n`;
+    card += `🟢 *STATUS: ZERO SETTLEMENTS DUE*\n`;
+    card += `• No unreleased T+1 merchant sales recorded for yesterday.\n`;
     card += `• Settlement ledger is 100% current.\n\n`;
-    card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    card += `👉 *COMMAND SHORTCUTS:*\n`;
-    card += `• View merchant reserves: \`!reserves\`\n`;
-    card += `• Platform status: \`!status\``;
+    card += `⚡ *COMMAND SHORTCUTS*\n`;
+    card += `• \`!reserves\` — View rolling merchant security reserves\n`;
+    card += `• \`!status\` — Platform vitals`;
   }
 
   return {
@@ -367,30 +362,34 @@ export async function generateLunchRushDocketReport() {
     minute: "2-digit"
   });
 
-  let card = `🍱 *[PLATFORM DOCKET: 12:00 PM LUNCH RUSH TELEMETRY]*\n`;
-  card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  card += `• Audit Timestamp: *${formattedEAT} EAT*\n`;
-  card += `• Lunch Orders (Since 11:00 AM): *${paidOrders.length} Paid* (${pendingOrders.length} pending checkout)\n`;
-  card += `• Lunch GMV: *KES ${lunchGmv.toLocaleString("en-US", { minimumFractionDigits: 2 })}*\n`;
-  card += `• Kitchen Bottlenecks (>25m prep): *${delayedPrep.length > 0 ? `⚠️ ${delayedPrep.length} Delayed Orders` : "0 (All Kitchens Clear ✅)"}*\n\n`;
+  let card = `🍱 *PLATFORM DOCKET: 12:00 PM LUNCH RUSH TELEMETRY*\n`;
+  card += `_Lunch Window (Since 11:00 AM) • Audit: ${formattedEAT} EAT_\n\n`;
+
+  card += `📊 *LUNCH VELOCITY*\n`;
+  card += `• Paid Orders: *${paidOrders.length} Paid*\n`;
+  card += `• Pending Carts: *${pendingOrders.length} In-Flight*\n`;
+  card += `• Lunch GMV: *KES ${lunchGmv.toLocaleString("en-US", { minimumFractionDigits: 2 })}*\n\n`;
+
+  card += `🍳 *KITCHEN BOTTLENECK STATUS*\n`;
+  card += `• Orders > 25m: *${delayedPrep.length > 0 ? `⚠️ ${delayedPrep.length} Delayed Orders` : "0 (All Kitchens Clear ✅)"}*\n\n`;
 
   if (delayedPrep.length > 0) {
-    card += `⚠️ *KITCHEN PREPARATION BOTTLENECKS:*\n`;
+    card += `⚠️ *ORDERS REQUIRING ATTENTION*\n\n`;
     delayedPrep.forEach((o, i) => {
       const s = shopMap.get(o.shop_id);
       const mins = Math.round((Date.now() - new Date(o.created_at).getTime()) / 60000);
-      card += `${i + 1}. *Order #${o.id.slice(0, 8).toUpperCase()}* (${s?.name || "Store"}) — KES ${Number(o.total_price || 0).toLocaleString()}\n`;
-      card += `   • Customer: ${o.client_name || "Guest"} | Waiting: *${mins} minutes*\n`;
+      card += `*${i + 1}. Order #${o.id.slice(0, 8).toUpperCase()}* (${s?.name || "Store"})\n`;
+      card += `   • Amount: KES ${Number(o.total_price || 0).toLocaleString()}\n`;
+      card += `   • Customer: ${o.client_name || "Guest"} | Waiting: *${mins} mins*\n\n`;
     });
-    card += `\n👉 _Action:_ \`!dispatch <order_id> [rider]\` or call kitchen\n`;
+    card += `👉 _Action:_ \`!dispatch <order_id> [rider]\` or contact kitchen staff.\n\n`;
   } else {
-    card += `✅ *Order flow smooth — zero kitchen bottlenecks detected.*\n`;
+    card += `🟢 *Order flow smooth — zero kitchen bottlenecks detected.*\n\n`;
   }
 
-  card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  card += `👉 *ACTION SHORTCUTS:*\n`;
-  card += `• Platform Telemetry: \`!status\`\n`;
-  card += `• Pending Checkouts: \`!unseconded\``;
+  card += `⚡ *ACTION SHORTCUTS*\n`;
+  card += `• \`!status\` — Platform telemetry\n`;
+  card += `• \`!unseconded\` — Pending payment claims`;
 
   return {
     success: true,
@@ -431,23 +430,26 @@ export async function generateWeeklyTuesdayDocketReport() {
     minute: "2-digit"
   });
 
-  let card = `🗓️ *[PLATFORM DOCKET: WEEKLY TUESDAY GOVERNANCE AUDIT]*\n`;
-  card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  card += `• Audit Timestamp: *${formattedEAT} EAT*\n`;
-  card += `• Rolling 7-Day GMV: *KES ${weekGmv.toLocaleString("en-US", { minimumFractionDigits: 2 })}* (${weekPaid.length} orders)\n`;
-  card += `• Rolling 7-Day Security Reserve Pool: *KES ${weekReserveEst.toLocaleString("en-US", { minimumFractionDigits: 2 })}*\n`;
-  card += `• Registered Merchants Audited: *${allShops.length} Stores*\n`;
-  card += `• SLA Governance State: *${infractionAudit.breachCount} Breaches* | *${infractionAudit.warningCount} Warnings*\n\n`;
+  let card = `🗓️ *PLATFORM DOCKET: WEEKLY TUESDAY GOVERNANCE AUDIT*\n`;
+  card += `_Audit: ${formattedEAT} EAT_\n\n`;
 
-  card += `🛡️ *WEEKLY AUDIT CHECKLIST:*\n`;
+  card += `📊 *7-DAY PLATFORM PULSE*\n`;
+  card += `• 7-Day GMV: *KES ${weekGmv.toLocaleString("en-US", { minimumFractionDigits: 2 })}* (${weekPaid.length} orders)\n`;
+  card += `• Rolling Reserve Pool: *KES ${weekReserveEst.toLocaleString("en-US", { minimumFractionDigits: 2 })}* (5% holdback)\n`;
+  card += `• Active Stores Audited: *${allShops.length} Stores*\n\n`;
+
+  card += `🛡️ *SLA GOVERNANCE HEALTH*\n`;
+  card += `• Critical Breaches: *${infractionAudit.breachCount}*\n`;
+  card += `• Approaching Warnings: *${infractionAudit.warningCount}*\n\n`;
+
+  card += `📋 *WEEKLY AUDIT VERIFICATIONS*\n`;
   card += `1. Rolling 7-day reserve reconciliation: Verified ✅\n`;
-  card += `2. Database backup snapshot integrity: Verified (Automated Supabase WAL) ✅\n`;
+  card += `2. Database backup snapshot integrity: Verified (Automated WAL) ✅\n`;
   card += `3. Merchant chargeback ratio audit: Complete (${infractionAudit.breachCount} exceeding 4% SLA)\n\n`;
 
-  card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  card += `👉 *WEEKLY ACTIONS:*\n`;
-  card += `• View full SLA breakdown: \`!infractions all\`\n`;
-  card += `• Reconcile reserve releases: \`!reserves reconcile\``;
+  card += `⚡ *WEEKLY ACTIONS*\n`;
+  card += `• \`!infractions all\` — View full SLA breakdown\n`;
+  card += `• \`!reserves reconcile\` — Release mature 14-day reserves`;
 
   return {
     success: true,
@@ -474,26 +476,26 @@ export async function generateMonthlyDocketReport() {
     minute: "2-digit"
   });
 
-  let card = `📆 *[PLATFORM DOCKET: MONTHLY 1ST BILLING & STATEMENTS]*\n`;
-  card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  card += `• Audit Timestamp: *${formattedEAT} EAT*\n`;
+  let card = `📆 *PLATFORM DOCKET: MONTHLY 1ST BILLING & STATEMENTS*\n`;
+  card += `_Audit: ${formattedEAT} EAT_\n\n`;
+
+  card += `📊 *SAAS SUBSCRIPTION OVERVIEW*\n`;
   card += `• Plan A SaaS Tenants: *${planAShops.length} Stores*\n`;
   card += `• Expected Monthly SaaS Revenue: *KES ${totalSubscriptionRevenue.toLocaleString()}*\n`;
   card += `• Statements of Account: *Ready for PDF/CSV generation*\n\n`;
 
   if (planAShops.length > 0) {
-    card += `📋 *PLAN A SAAS RENEWAL SCHEDULE:*\n`;
+    card += `📋 *PLAN A SAAS RENEWAL SCHEDULE*\n\n`;
     planAShops.forEach((s, i) => {
       const bDay = s.fulfillment_settings?.billing?.billing_day_of_month || 1;
-      card += `${i + 1}. *${s.name}* (\`${s.slug}\`) — Due Day: ${bDay}th\n`;
+      card += `*${i + 1}. ${s.name}* (\`${s.slug}\`) — Due Day: ${bDay}th\n`;
     });
     card += `\n`;
   }
 
-  card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  card += `👉 *MONTHLY ACTIONS:*\n`;
-  card += `• Run platform GMV statement: \`!summary\`\n`;
-  card += `• Issue all monthly statements: \`!statements dispatch all\``;
+  card += `⚡ *MONTHLY ACTIONS*\n`;
+  card += `• \`!summary\` — Run platform GMV statement\n`;
+  card += `• \`!statements dispatch all\` — Issue all monthly statements`;
 
   return {
     success: true,

@@ -115,20 +115,24 @@ export async function executeDatabaseBackup({
     console.warn("[BACKUP PRUNE WARN]", pruneErr.message);
   }
 
-  // Format WhatsApp Notification Card
-  let alertCard = `📦 *[DATABASE BACKUP SENTINEL: 03:00 AM SNAPSHOT]*\n`;
-  alertCard += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  alertCard += `• Timestamp: *${dateStr} ${timeStr} EAT*\n`;
+  // Format WhatsApp Notification Card with Clean Whitespace & Grouped Scannability
+  let alertCard = `📦 *DATABASE BACKUP SENTINEL: 03:00 AM SNAPSHOT*\n`;
+  alertCard += `_Audit: ${dateStr} ${timeStr} EAT_\n\n`;
+
+  alertCard += `📊 *ARCHIVE SUMMARY*\n`;
   alertCard += `• Archive: \`${filename}\` (*${sizeKb} KB*)\n`;
-  alertCard += `• Total Records Captured: *${totalRecords} items*\n`;
-  alertCard += `• Tables Dumped (${BACKUP_TABLES.length}):\n`;
-  for (const [tbl, count] of Object.entries(tableCounts)) {
-    alertCard += `   • ${tbl}: *${count} records*\n`;
-  }
-  alertCard += `• Retention Policy: *${retentionDays}-Day Rolling Archive* (${prunedCount} expired pruned)\n`;
-  alertCard += `• Storage Status: *Gzip Compressed & Verified ✅*\n`;
-  alertCard += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  alertCard += `_Autonomous Platform Resilience • Zero Git Bloat_`;
+  alertCard += `• Total Records: *${totalRecords} items captured*\n`;
+  alertCard += `• Compression: *Gzip Verified (Zero Data Loss) ✅*\n\n`;
+
+  alertCard += `📁 *TABLE BREAKDOWN*\n`;
+  const tblSummary = Object.entries(tableCounts)
+    .map(([tbl, count]) => `• ${tbl}: *${count} records*`)
+    .join("\n");
+  alertCard += `${tblSummary}\n\n`;
+
+  alertCard += `🛡️ *STORAGE RETENTION*\n`;
+  alertCard += `• Policy: *${retentionDays}-Day Rolling Archive* (${prunedCount} expired pruned)\n`;
+  alertCard += `• Resilience: Autonomous Local Snapshot • Zero Git Bloat`;
 
   if (safeSendMessage) {
     const targetJid = GROUPS?.adminOversight?.jid || "120363415291701803@g.us";

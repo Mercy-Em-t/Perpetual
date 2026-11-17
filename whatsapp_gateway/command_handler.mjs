@@ -505,21 +505,23 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
       // Remediation Status
       const sus = shop.fulfillment_settings?.quality_suspension;
       const isSuspended = shop.is_active === false || sus?.is_suspended === true;
-      let msg = `📋 *[REMEDIATION & SLA STATUS: ${shop.name}]*\n`;
-      msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      let msg = `📋 *REMEDIATION & SLA STATUS: ${shop.name}*\n\n`;
+      msg += `🏪 *STORE STATE*\n`;
       msg += `• Storefront Status: ${isSuspended ? "🔴 *SUSPENDED*" : "🟢 *ACTIVE*"}\n`;
       if (isSuspended) {
         msg += `• Reason: _${sus?.reason || "Quality SLA review"}_\n`;
-        msg += `• Suspended At: ${sus?.suspended_at ? new Date(sus.suspended_at).toLocaleString("en-GB", { timeZone: "Africa/Nairobi" }) : "Recent"}\n`;
+        msg += `• Suspended At: ${sus?.suspended_at ? new Date(sus.suspended_at).toLocaleString("en-GB", { timeZone: "Africa/Nairobi" }) : "Recent"}\n\n`;
         if (sus?.remediation_submission) {
-          msg += `• Remediation Submission: *${sus.remediation_submission.status}*\n`;
-          msg += `• Submitted Notes: _${sus.remediation_submission.notes}_\n`;
+          msg += `📝 *SUBMISSION STATUS*\n`;
+          msg += `• Status: *${sus.remediation_submission.status}*\n`;
+          msg += `• Notes: _${sus.remediation_submission.notes}_\n`;
         } else {
-          msg += `\n📋 *MANDATORY GATES:*\n` +
-                 `1. Clear unfulfilled cancellations.\n` +
-                 `2. Audit daily physical stock limits.\n` +
-                 `3. Re-commit to 25-min prep SLA.\n\n` +
-                 `👉 *To submit plan:* \`!remediation submit <notes>\``;
+          msg += `📋 *MANDATORY REMEDIATION GATES*\n` +
+                 `1. Clear unfulfilled cancellations & customer claims\n` +
+                 `2. Audit daily physical stock limits in store catalog\n` +
+                 `3. Re-commit to 25-min kitchen preparation SLA\n\n` +
+                 `⚡ *HOW TO SUBMIT*\n` +
+                 `• Type: \`!remediation submit <notes>\``;
         }
       } else {
         msg += `• Store is operating normally with zero open quality suspensions.\n`;
@@ -2135,20 +2137,20 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
 
       // Formal Suspension Notice to Merchant Channels
       const merchantNotice =
-        `🛑 *[OFFICIAL NOTICE: STOREFRONT TEMPORARILY SUSPENDED]*\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🛑 *OFFICIAL NOTICE: STOREFRONT TEMPORARILY SUSPENDED*\n\n` +
+        `🏪 *STORE STATE*\n` +
         `• Store: *${res.shopName}* (\`${res.shopSlug}\`)\n` +
         `• Status: *SUSPENDED FROM PUBLIC ORDERING* 🔴\n` +
         `• Reason: _${reason}_\n` +
-        `• Action Taken: Storefront checkout blocked & buyable stock hidden.\n\n` +
-        `📋 *MANDATORY REMEDIATION CHECKLIST:*\n` +
-        `1. Resolve Unfulfilled Orders: Clear all customer refund claims or issue replacement vouchers.\n` +
-        `2. Inventory Audit: Update physical stock daily caps to prevent stockouts.\n` +
+        `• Impact: Public checkout blocked & buyable stock hidden.\n\n` +
+        `📋 *MANDATORY REMEDIATION CHECKLIST*\n` +
+        `1. Resolve Unfulfilled Orders: Clear all refund claims or issue replacement vouchers.\n` +
+        `2. Inventory Audit: Update physical stock daily caps to prevent overselling.\n` +
         `3. SLA Re-Commitment: Re-confirm kitchen readiness for our 25-minute prep SLA.\n\n` +
-        `👉 *HOW TO REQUEST REINSTATEMENT:*\n` +
+        `⚡ *HOW TO REQUEST REINSTATEMENT*\n` +
         `Once actions are complete, reply in this group with:\n` +
-        `\`!remediation submit <summary of fixes and inventory adjustments>\`\n` +
-        `_Our governance desk will audit and unblock your storefront._`;
+        `\`!remediation submit <summary of fixes and inventory adjustments>\`\n\n` +
+        `_Our governance desk will audit and unblock your storefront promptly._`;
 
       for (const targetJid of res.targetJids || []) {
         if (targetJid !== replyJid) {
@@ -2189,13 +2191,13 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
 
       // Welcome Back Alert to Merchant Channels
       const merchantWelcome =
-        `🎉 *[STORE CATALOG REINSTATED — WELCOME BACK!]*\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🎉 *STORE CATALOG REINSTATED — WELCOME BACK!*\n\n` +
+        `🏪 *STORE STATE*\n` +
         `• Store: *${res.shopName}* (\`${res.shopSlug}\`)\n` +
         `• Status: *LIVE & ACTIVE* 🟢\n` +
         `• Approved By: @${callerName}\n` +
-        `• Review Notes: _${reason}_\n\n` +
-        `✅ Your online catalog has been re-enabled and is now actively accepting customer checkouts.\n` +
+        `• Audit Notes: _${reason}_\n\n` +
+        `✅ Your online catalog has been re-enabled and is now actively accepting customer checkouts.\n\n` +
         `_Wishing you great sales and smooth operations today!_`;
 
       for (const targetJid of res.targetJids || []) {
@@ -2240,13 +2242,15 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
         });
 
         const exportMsg =
-          `📊 *[SAFARICOM M-PESA B2C BATCH EXPORT]*\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `• Total Pool: *KES ${docket.totalPlatformPayout.toLocaleString()}*\n` +
+          `📊 *SAFARICOM M-PESA B2C BATCH EXPORT*\n\n` +
+          `💰 *DISBURSEMENT POOL*\n` +
+          `• Total Payout: *KES ${docket.totalPlatformPayout.toLocaleString()}*\n` +
           `• Qualifying Merchants: *${eligible.length}*\n\n` +
+          `📁 *CSV FOR SAFARICOM PORTAL*\n` +
           `\`\`\`csv\n${csv}\`\`\`\n` +
-          `👉 _Copy the CSV block above to upload directly to the Safaricom M-Pesa Org Portal._\n` +
-          `_Once disbursed on portal, run *!settle approve all* to reconcile internal ledgers._`;
+          `⚡ *ACTIONS*\n` +
+          `1. Copy the CSV block above to upload to Safaricom M-Pesa Org Portal.\n` +
+          `2. Once approved on portal, run \`!settle approve all\` to reconcile ledgers.`;
 
         await safeSendMessage(replyJid, { text: exportMsg });
         return;

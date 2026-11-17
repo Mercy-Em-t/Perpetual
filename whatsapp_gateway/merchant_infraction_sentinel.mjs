@@ -196,66 +196,65 @@ export function formatInfractionDocketCard(results, isAllTime = false, autoSuspe
     minute: "2-digit"
   });
 
-  let card = `🛡️ *[MERCHANT INFRACTION & SLA GOVERNANCE DOCKET]*\n`;
-  card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  card += `• Mode: *${isAllTime ? "COMPLETE DATABASE SWEEP" : "TRAILING 7D/30D SLA WINDOW"}*\n`;
-  card += `• Timestamp: *${timeLabel} EAT*\n`;
-  card += `• Stores Scanned: *${results.length} Registered Tenants*\n`;
-  card += `• Breaches Flagged: *${breaches.length} CRITICAL* | Warnings: *${warnings.length}*\n\n`;
+  let card = `🛡️ *MERCHANT INFRACTION & SLA GOVERNANCE DOCKET*\n`;
+  card += `_Audit: ${timeLabel} EAT • Mode: ${isAllTime ? "Complete Historical Sweep" : "Trailing 7D/30D Window"}_\n\n`;
+
+  card += `📊 *PLATFORM HEALTH*\n`;
+  card += `• Tenants Audited: *${results.length} Stores*\n`;
+  card += `• SLA Governance: *${breaches.length} Critical Breaches* | *${warnings.length} Warnings*\n\n`;
 
   if (breaches.length > 0) {
-    card += `🚨 *CRITICAL SLA BREACHES (ACTION REQUIRED):*\n`;
+    card += `🚨 *CRITICAL SLA BREACHES (ACTION REQUIRED)*\n\n`;
     breaches.forEach((b, i) => {
       const activeBadge = b.isActive ? "🟢 Active" : "🔴 Suspended";
-      card += `${i + 1}. *${b.shopName}* (\`${b.shopSlug}\`) [${activeBadge}]\n`;
+      card += `*${i + 1}. ${b.shopName}* (\`${b.shopSlug}\`) [${activeBadge}]\n`;
 
       if (b.rule1State === "BREACH_CRITICAL") {
-        card += `   • 🚨 *7-Day Unfulfilled:* *${b.unfulfilled7dCount} Orders* (Threshold: $\\ge 3$ in 7d)\n`;
+        card += `   • 7-Day Unfulfilled: *${b.unfulfilled7dCount} Orders* (Threshold: ≥ 3 in 7d)\n`;
         const ids = b.unfulfilled7dOrders.slice(0, 3).map(o => `#${o.shortId}`).join(", ");
-        card += `     _Flagged:_ ${ids}\n`;
-        card += `     _SLA Penalty:_ *Temporary Catalog Suspension (24-Hour Review)*\n`;
+        card += `     _Flagged Orders:_ ${ids}\n`;
+        card += `     _SLA Penalty:_ Temporary Catalog Suspension (24-Hour Review)\n`;
       }
 
       if (b.rule2State === "BREACH_CRITICAL") {
-        card += `   • ⚠️ *Refund Rate:* *${b.refundRatePercent}%* (${b.refunded30dCount}/${b.orders30dCount} orders) [Threshold: $> 4\\%$]\n`;
-        card += `     _SLA Penalty:_ *Mandatory Management Audit & Meeting*\n`;
+        card += `   • Refund Rate: *${b.refundRatePercent}%* (${b.refunded30dCount}/${b.orders30dCount} orders) [Threshold: > 4%]\n`;
+        card += `     _SLA Penalty:_ Mandatory Executive Audit & Meeting\n`;
       }
 
       if (b.autoSuspendedNow) {
-        card += `   • 🛑 *ACTION EXECUTED:* Catalog automatically set INACTIVE.\n`;
+        card += `   • 🛑 _ACTION:_ Catalog automatically marked INACTIVE.\n`;
       }
       card += `\n`;
     });
   }
 
   if (warnings.length > 0) {
-    card += `🟡 *STORES AT RISK (APPROACHING THRESHOLD):*\n`;
+    card += `🟡 *STORES AT RISK (APPROACHING LIMIT)*\n\n`;
     warnings.forEach((w, i) => {
-      card += `${i + 1}. *${w.shopName}* (\`${w.shopSlug}\`)\n`;
-      card += `   • Unfulfilled in window: *${w.unfulfilled7dCount} / 3* (1 more triggers suspension!)\n`;
+      card += `*${i + 1}. ${w.shopName}* (\`${w.shopSlug}\`)\n`;
+      card += `   • Unfulfilled: *${w.unfulfilled7dCount} / 3 orders* (1 more triggers suspension)\n\n`;
     });
-    card += `\n`;
   }
 
   if (compliant.length > 0) {
-    card += `🟢 *COMPLIANT STORES (${compliant.length}):*\n`;
-    const names = compliant.slice(0, 6).map(c => `• ${c.shopName} (0 breaches)`).join("\n");
+    card += `🟢 *COMPLIANT STORES (${compliant.length})*\n`;
+    const names = compliant.slice(0, 6).map(c => `• ${c.shopName}`).join("\n");
     card += `${names}\n`;
     if (compliant.length > 6) {
-      card += `_...and ${compliant.length - 6} other compliant stores._\n`;
+      card += `_...and ${compliant.length - 6} other compliant stores._\n\n`;
+    } else {
+      card += `\n`;
     }
-    card += `\n`;
   }
 
-  card += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  card += `👉 *ADMIN DECISION ACTIONS (SUBMIT BACK):*\n`;
+  card += `⚡ *ADMIN SHORTCUTS*\n`;
   if (breaches.length > 0) {
     const firstBreach = breaches[0];
-    card += `• Suspend store catalog: \`!suspend ${firstBreach.shopSlug} 3 unfulfilled orders\`\n`;
-    card += `• Reinstate store: \`!reinstate ${firstBreach.shopSlug} Resolved with merchant\`\n`;
+    card += `• \`!suspend ${firstBreach.shopSlug} 3 unfulfilled orders\`\n`;
+    card += `• \`!reinstate ${firstBreach.shopSlug} Resolved with merchant\`\n`;
   }
-  card += `• Drill down store: \`!infractions <shop_slug>\`\n`;
-  card += `• Run complete sweep: \`!infractions all\``;
+  card += `• \`!infractions <slug>\` — Drill down single store\n`;
+  card += `• \`!infractions all\` — Sweep entire platform`;
 
   return card;
 }

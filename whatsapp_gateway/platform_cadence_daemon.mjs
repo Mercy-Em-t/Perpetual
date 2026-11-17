@@ -95,14 +95,16 @@ async function checkStalledKitchenOrders(safeSendMessage, targetJid) {
       const elapsedMins = Math.round((Date.now() - new Date(order.created_at).getTime()) / 60000);
       const shortId = order.id.slice(0, 8).toUpperCase();
       const stallMsg =
-        `⚠️ *[KITCHEN STALL ALERT: ORDER UNACKNOWLEDGED]*\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `⚠️ *KITCHEN STALL ALERT: ORDER UNACKNOWLEDGED*\n\n` +
+        `📦 *ORDER DETAILS*\n` +
         `• Order: *#${shortId}* (KES ${Number(order.total_price || 0).toLocaleString()})\n` +
-        `• Customer: ${order.client_name || "Customer"} (\`${order.client_phone || "N/A"}\`)\n` +
-        `• Time Elapsed: *${elapsedMins} Minutes in PAID State*\n` +
-        `• Risk: Kitchen staff has not accepted order with \`!prep #${shortId}\`.\n` +
-        `• Potential Cause: Merchant phone offline or Wi-Fi blackout (KPLC factor).\n\n` +
-        `👉 *Action:* Please call merchant or run \`!prep ${shortId}\` to dispatch.`;
+        `• Customer: *${order.client_name || "Customer"}* (\`${order.client_phone || "N/A"}\`)\n` +
+        `• Status: *${elapsedMins} Minutes in PAID State* (No Kitchen Acknowledgment)\n\n` +
+        `🚨 *DIAGNOSTIC & RISK*\n` +
+        `• Risk: Customer waiting without kitchen prep\n` +
+        `• Probable Cause: Kitchen phone offline, muted, or Wi-Fi blackout (KPLC factor)\n\n` +
+        `⚡ *IMMEDIATE ACTION*\n` +
+        `• Call merchant directly or run: \`!prep ${shortId}\``;
 
       await safeSendMessage(targetJid, { text: stallMsg }).catch(() => {});
     }
@@ -254,18 +256,17 @@ export async function evaluateCadenceTriggers({
     try {
       console.log(`[CADENCE DAEMON] Dispatching 2-Day Pre-Monthly Reminder (${eat.dateKey})...`);
       const preMonthlyCard =
-        `📅 *[PLATFORM REMINDER: 2 DAYS TO MONTHLY DATE WITH THE SYSTEM]*\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `• Session: *Monthly Platform & Merchant Review*\n` +
-        `• When: *1st of Next Month at 09:00 AM EAT*\n` +
-        `• Calendar Status: *Blocked on Google Calendar* 🗓️\n\n` +
-        `📋 *PRE-SESSION AGENDA TO PREPARE:*\n` +
+        `📅 *PLATFORM REMINDER: 2 DAYS TO MONTHLY DATE WITH THE SYSTEM*\n\n` +
+        `🏢 *EXECUTIVE SESSION*\n` +
+        `• Agenda: *Monthly Platform & Merchant Review*\n` +
+        `• Scheduled: *1st of Next Month at 09:00 AM EAT*\n` +
+        `• Calendar Status: *Confirmed on Google Calendar* 🗓️\n\n` +
+        `📋 *PRE-SESSION PREPARATION*\n` +
         `1. Plan A SaaS subscription invoicing & auto-netting (KES 3,500/store)\n` +
         `2. Generate & audit Monthly Merchant Statements of Account (PDF/CSV)\n` +
         `3. Review Cloudflare bandwidth logs & Tailscale node telemetry\n` +
-        `4. Rolling 7-day reserve reconciliation & dispute chargeback sign-off\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `👉 _Please protect this focused block in your schedule._`;
+        `4. Rolling 7-day reserve reconciliation & dispute chargeback sign-off\n\n` +
+        `👉 _Please protect this focused 2-hour block in your schedule._`;
 
       if (safeSendMessage && targetOversightJid) {
         await safeSendMessage(targetOversightJid, { text: preMonthlyCard });
@@ -284,17 +285,16 @@ export async function evaluateCadenceTriggers({
     try {
       console.log(`[CADENCE DAEMON] Dispatching 2-Day Pre-Annual Reminder (${eat.dateKey})...`);
       const preAnnualCard =
-        `🏆 *[PLATFORM REMINDER: 2 DAYS TO ANNUAL DATE WITH THE SYSTEM]*\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `• Session: *Annual Platform Strategy & Infrastructure Audit*\n` +
-        `• When: *December 15 at 09:00 AM – 13:00 PM EAT*\n` +
-        `• Calendar Status: *Blocked on Google Calendar* 🗓️\n\n` +
-        `📋 *ANNUAL EXECUTIVE AUDIT ITEMS:*\n` +
+        `🏆 *PLATFORM REMINDER: 2 DAYS TO ANNUAL DATE WITH THE SYSTEM*\n\n` +
+        `🏛️ *ANNUAL STRATEGY AUDIT*\n` +
+        `• Agenda: *Annual Platform Strategy & Infrastructure Audit*\n` +
+        `• Scheduled: *December 15 at 09:00 AM – 13:00 PM EAT*\n` +
+        `• Calendar Status: *Confirmed on Google Calendar* 🗓️\n\n` +
+        `📋 *ANNUAL EXECUTIVE AUDIT ITEMS*\n` +
         `1. Merchant contract recertification & KYC permit/KRA compliance\n` +
         `2. Annual commercial SLA, commission structure & tariff review\n` +
         `3. Full disaster recovery drill & PostgreSQL multi-region snapshot test\n` +
-        `4. Platform Gross Merchandise Value (GMV) & tax withholding audit\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `4. Platform Gross Merchandise Value (GMV) & tax withholding audit\n\n` +
         `👉 _4-hour executive block reserved. Please clear external meetings._`;
 
       if (safeSendMessage && targetOversightJid) {
