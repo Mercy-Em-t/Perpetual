@@ -2218,6 +2218,90 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
     }
   }
 
+  // 7c. 1-Tap Tenant Provisioning: !tenant provision <slug> <tier1|tier2> <Name> <Phone>
+  if (command === "!tenant" || command === "!provision") {
+    const rawParts = (args || "").trim();
+    if (!rawParts || rawParts.toLowerCase() === "help") {
+      await safeSendMessage(replyJid, {
+        text: `🚀 *TENANT PROVISIONING USAGE*\n\n` +
+              `• Command: \`!tenant provision <slug> <tier1|tier2> <Name> <Phone>\`\n` +
+              `• Example: \`!tenant provision afroboutique tier2 "Afro Boutique" +254712345678\`\n\n` +
+              `_Tiers:_\n` +
+              `• *tier1*: Starter (KES 5,000 Setup • KES 3,500/mo)\n` +
+              `• *tier2*: Branded Pro (KES 25,000 Setup • KES 4,500/mo + BYOD CNAME)`
+      });
+      return;
+    }
+
+    const match = rawParts.match(/^(?:provision\s+)?(\S+)\s+(tier1|tier2)\s+["']?([^"'+0-9]+?)["']?\s+([+0-9]+)$/i);
+    if (!match) {
+      await safeSendMessage(replyJid, {
+        text: `⚠️ *Invalid Format:* Please use:\n\`!tenant provision <slug> <tier1|tier2> <Name> <Phone>\`\n` +
+              `_e.g. !tenant provision savannah-craft tier2 "Savannah Craft" 0710720949_`
+      });
+      return;
+    }
+
+    const [_, slug, tier, merchantName, phone] = match;
+    const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, "");
+    const cleanPhone = phone.trim();
+    const cleanName = merchantName.trim();
+
+    try {
+      const port = process.env.PORT || 8085;
+      const provRes = await fetch(`http://127.0.0.1:${port}/api/shops/provision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cleanName,
+          slug: cleanSlug,
+          phone: cleanPhone,
+          owner_phone: cleanPhone,
+          tier: tier.toLowerCase(),
+          pipeline_type: "retail",
+          currency: "KES"
+        })
+      });
+      const provData = await provRes.json();
+      if (!provRes.ok || provData.error) {
+        throw new Error(provData.error || `HTTP ${provRes.status}`);
+      }
+
+      const setupFee = tier.toLowerCase() === "tier2" ? "25,000" : "5,000";
+      const monthlyFee = tier.toLowerCase() === "tier2" ? "4,500" : "3,500";
+      const opsInvite = provData.whatsapp?.operations?.invite_url || "Channel provisioned internally";
+
+      const card =
+        `🚀 *STORE-IN-A-BOX PROVISIONED: ${cleanName}*\n\n` +
+        `🏪 *TENANT PROFILE*\n` +
+        `• Slug: \`${cleanSlug}\`\n` +
+        `• Tier: *${tier.toUpperCase()} (${tier.toLowerCase() === "tier2" ? "Branded Pro" : "Starter"})*\n` +
+        `• Terms: *KES ${setupFee} Setup • KES ${monthlyFee}/Month*\n` +
+        `• Contact: \`${cleanPhone}\`\n\n` +
+        `🌐 *LIVE STORE ACCESS*\n` +
+        `• Storefront: https://missperpetual.cloud/${cleanSlug}\n` +
+        `• Custom DNS: CNAME \`shop.${cleanSlug}.com\` ➔ \`cname.missperpetual.cloud\`\n` +
+        `• Ops Channel: ${opsInvite}\n\n` +
+        `🛡️ *SAFE HARBOR TERMS OF SERVICE*\n` +
+        `• Platform Invariant: Neutral software provider only. Merchant holds 100% fulfillment warranty & customer service.\n\n` +
+        `📱 *FORWARDABLE MERCHANT WELCOME*\n` +
+        `\`\`\`\n` +
+        `Welcome to Perpetual Commerce!\n` +
+        `Your branded store is ready:\n` +
+        `Store Link: https://missperpetual.cloud/${cleanSlug}\n` +
+        `Ops WhatsApp Hub: ${opsInvite}\n` +
+        `Custom Domain: Add CNAME pointing to cname.missperpetual.cloud\n` +
+        `Terms & Policy: https://missperpetual.cloud/terms\n` +
+        `\`\`\``;
+
+      await safeSendMessage(replyJid, { text: card });
+      return;
+    } catch (err) {
+      await safeSendMessage(replyJid, { text: `❌ Provisioning failed: ${err.message}` });
+      return;
+    }
+  }
+
   // 7b. Settlement Ledger & M-Pesa CSV Export: !settle [export | approve all | approve <slug> | hold <slug>]
   if (command === "!settle" || command === "!settlement") {
     const subAction = (args || "").trim().split(/\s+/)[0]?.toLowerCase();

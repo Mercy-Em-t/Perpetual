@@ -278,6 +278,13 @@ export async function handleOpsGroupsAndSupportRoutes({
 
         const updatedSettings = {
           ...currentSettings,
+          tier: body.tier || currentSettings.tier || "tier1",
+          billing: {
+            setup_fee: body.tier === "tier2" ? 25000 : 5000,
+            monthly_fee: body.tier === "tier2" ? 4500 : 3500,
+            billing_day_of_month: 1,
+            ...(currentSettings.billing || {})
+          },
           currency,
           pipeline_type,
           is_preorder: isPreorder,
