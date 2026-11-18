@@ -280,10 +280,10 @@ export async function handleOpsGroupsAndSupportRoutes({
           ...currentSettings,
           tier: body.tier || currentSettings.tier || "tier1",
           billing: {
-            setup_fee: body.tier === "tier2" ? 25000 : 5000,
-            monthly_fee: body.tier === "tier2" ? 4500 : 3500,
             billing_day_of_month: 1,
-            ...(currentSettings.billing || {})
+            ...(currentSettings.billing || {}),
+            setup_fee: body.tier === "tier2" ? 25000 : 5000,
+            monthly_fee: body.tier === "tier2" ? 4500 : 3500
           },
           currency,
           pipeline_type,

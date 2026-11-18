@@ -55,7 +55,7 @@ export const KNOWN_COMMANDS = [
   "ticket", "tickets", "claim", "resolve", "sentinel",
   "voucher", "vouchers", "refund",
   "infractions", "infraction", "suspend", "reinstate",
-  "docket", "dockets", "backup"
+  "docket", "dockets", "backup", "tenant", "provision"
 ];
 
 const dbHdrs = {
@@ -2426,7 +2426,7 @@ async function handleDirectMessageCommand(command, args, replyJid, senderId, cal
   // Executive DM Passthrough: Allow platform admins to execute executive governance commands from private DM
   const cleanSender = String(senderId).replace(/@.*$/, "").replace(/[^0-9]/g, "");
   const isPlatformAdmin = cleanSender === "254710720949" || cleanSender.endsWith("710720949");
-  const adminAllowed = ["!suspend", "!reinstate", "!infractions", "!docket", "!backup", "!settle", "!summary", "!second", "!cancel"];
+  const adminAllowed = ["!suspend", "!reinstate", "!infractions", "!docket", "!backup", "!settle", "!summary", "!second", "!cancel", "!tenant", "!provision"];
   if (isPlatformAdmin && adminAllowed.includes(command)) {
     return await handleSystemCommand(command, args, replyJid, senderId, callerName, { tier: "SYSTEM", role: "EXECUTIVE" }, safeSendMessage);
   }
