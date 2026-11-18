@@ -1,0 +1,167 @@
+{
+  "shop_id": "aura-0001-4444-8888-000000000001",
+  "shop_slug": "aura-and-co",
+  "name": "Aura & Co.",
+  "shop_name": "Aura & Co. ✨",
+  "logo_emoji": "✨",
+  "tagline": "Everyday Personal Care & Grooming Elevation",
+  "industry": "beauty-and-personal-care",
+  "currency": "KES",
+  "order_prefix": "AURA",
+  "mpesa_till_number": "5758419",
+  "whatsapp_groups": {},
+  "catalog": [
+    {
+      "id": "aura-bundle-crown-mastery",
+      "sku": "AURA-BND-CROWN",
+      "name": "The Crown Mastery Suite (DIY Wig & Crochet Kit)",
+      "description": "Complete weekend styling & hair protection bundle: Reversible Silk Bonnet, Ergonomic Crochet Hook, 300ml Mist Bottle, Alligator Sectioning Clips (6pcs), 2x HD Wig Caps & 24 Rust-Proof Safety Pins.",
+      "price": 1450,
+      "category": "Curated Bundles",
+      "is_active": true
+    },
+    {
+      "id": "aura-bundle-clean-girl",
+      "sku": "AURA-BND-CLEANGIRL",
+      "name": "The Clean Girl Morning Elevation Kit",
+      "description": "Your 5-minute morning canvas: 2x Latex-Free Teardrop Blenders, Smudge-Proof Eye Pencil, 36x Hydrocolloid Pimple Patches, 3x Precision Dermaplaning Razors & Satin Hairband.",
+      "price": 890,
+      "category": "Curated Bundles",
+      "is_active": true
+    },
+    {
+      "id": "aura-bundle-raw-glow",
+      "sku": "AURA-BND-RAWGLOW",
+      "name": "Raw Glow African Bath & Moisture Ritual",
+      "description": "Authentic full-body hydration ritual: Authentic Long-Reach African Net Sponge, 250g Jar 100% Pure Whipped East African Shea Butter & 100ml Deep Botanical Glow Oil.",
+      "price": 1150,
+      "category": "Curated Bundles",
+      "is_active": true
+    },
+    {
+      "id": "aura-bundle-at-home-mani",
+      "sku": "AURA-BND-MANI",
+      "name": "At-Home Mani Studio (Precision Nail Care)",
+      "description": "Professional salon-level nail grooming: Portable USB UV/LED Gel Curing Lamp (6W), Keratin Cuticle Oil Twist Pen, Double-Sided Crystal Glass Nail File & 4-Way Shine Buffer Block.",
+      "price": 1250,
+      "category": "Curated Bundles",
+      "is_active": true
+    },
+    {
+      "id": "aura-satin-bonnet",
+      "sku": "AURA-CRW-BONNET",
+      "name": "Reversible Silk Satin Sleep Bonnet",
+      "description": "Luxurious double-sided reversible satin bonnet engineered for zero friction, moisture retention, and zero slippage.",
+      "price": 550,
+      "category": "The Crown",
+      "is_active": true,
+      "attributes": {
+        "style": ["Classic Scrunched Elastic", "Wide Wrap-Around Edge Tie"],
+        "size": ["Regular / Medium", "Jumbo / Extra Large"],
+        "colors": ["Jet Black", "Emerald Green", "Wine Red", "Royal Blue", "Champagne Gold"]
+      }
+    },
+    {
+      "id": "aura-spray-bottle",
+      "sku": "AURA-CRW-SPRAY",
+      "name": "Ultra-Fine Continuous Mist Spray Bottle",
+      "description": "Ergonomic continuous 360-degree aerosol-feel fine mist sprayer.",
+      "price": 300,
+      "category": "The Crown",
+      "is_active": true,
+      "attributes": {
+        "capacity": ["200ml", "300ml", "500ml"],
+        "finish": ["Matte Midnight Black", "Frosted Translucent White", "Rose Gold Gradient"]
+      }
+    },
+    {
+      "id": "aura-crochet-hook",
+      "sku": "AURA-CRW-HOOK",
+      "name": "Ergonomic Soft-Grip Crochet Latch Hook",
+      "description": "Smooth stainless steel latch hook with comfortable non-slip ergonomic silicone handle.",
+      "price": 220,
+      "category": "The Crown",
+      "is_active": true
+    },
+    {
+      "id": "aura-african-net-sponge",
+      "sku": "AURA-BDY-SPONGE",
+      "name": "Authentic African Exfoliating Net Sponge",
+      "description": "The ultimate full-body shower essential. Stretches over 1 meter to scrub entire back.",
+      "price": 450,
+      "category": "The Body",
+      "is_active": true
+    },
+    {
+      "id": "aura-whipped-shea-butter",
+      "sku": "AURA-BDY-SHEA",
+      "name": "100% Pure Whipped East African Shea Butter (250g)",
+      "description": "Silky-smooth whipped Nilotica shea butter infused with sweet almond oil and vanilla bean.",
+      "price": 490,
+      "category": "The Body",
+      "is_active": true
+    },
+    {
+      "id": "aura-cuticle-oil-pen",
+      "sku": "AURA-NLS-CUTICLE",
+      "name": "Keratin & Vitamin E Cuticle Oil Twist Pen",
+      "description": "Leak-proof twist pen with soft applicator brush. Restores dry cracked cuticles.",
+      "price": 180,
+      "category": "Hands & Feet",
+      "is_active": true
+    }
+  ],
+  "pipeline": {
+    "initial_station": "PENDING",
+    "stations": [
+      {
+        "id": "PENDING",
+        "label": "Pending Payment",
+        "emoji": "🟡",
+        "action_command": "!paid",
+        "authorized_roles": ["CASHIER", "MANAGEMENT"],
+        "next": "PACKAGING"
+      },
+      {
+        "id": "PACKAGING",
+        "label": "Packing Order",
+        "emoji": "📦",
+        "action_command": "!pack",
+        "authorized_roles": ["PACKAGER", "OPERATIONS"],
+        "next": "VERIFIED"
+      },
+      {
+        "id": "VERIFIED",
+        "label": "QA Verified",
+        "emoji": "🔍",
+        "action_command": "!verify",
+        "authorized_roles": ["QA_INSPECTOR", "MANAGEMENT"],
+        "next": "IN_TRANSIT"
+      },
+      {
+        "id": "IN_TRANSIT",
+        "label": "Out for Delivery",
+        "emoji": "🚚",
+        "action_command": "!dispatch",
+        "authorized_roles": ["COURIER", "OPERATIONS"],
+        "next": "DELIVERED"
+      },
+      {
+        "id": "DELIVERED",
+        "label": "Delivered",
+        "emoji": "📍",
+        "action_command": "!delivered",
+        "authorized_roles": ["COURIER", "RIDER", "MANAGEMENT"],
+        "next": "COMPLETED"
+      },
+      {
+        "id": "COMPLETED",
+        "label": "Completed",
+        "emoji": "✅",
+        "action_command": "!confirm",
+        "authorized_roles": ["CUSTOMER", "MANAGEMENT"],
+        "next": null
+      }
+    ]
+  }
+}
