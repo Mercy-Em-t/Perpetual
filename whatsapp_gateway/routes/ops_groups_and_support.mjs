@@ -283,7 +283,8 @@ export async function handleOpsGroupsAndSupportRoutes({
             billing_day_of_month: 1,
             ...(currentSettings.billing || {}),
             setup_fee: body.tier === "tier2" ? 25000 : 5000,
-            monthly_fee: body.tier === "tier2" ? 4500 : 3500
+            monthly_fee: body.tier === "tier2" ? 4500 : 3500,
+            first_month_free: body.tier === "tier2" ? false : true
           },
           currency,
           pipeline_type,
