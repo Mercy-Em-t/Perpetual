@@ -50,6 +50,8 @@ import {
   AUDIT_DECISION
 } from "./security_access_sentinel.mjs";
 import { executeShopBroadcast } from "./broadcast_guardrails.mjs";
+import { evaluateFsmTransition } from "./monotonic_fsm_guard.mjs";
+import { parseVoiceTranscription } from "./voice_fsm_parser.mjs";
 
 export const KNOWN_COMMANDS = [
   "help", "status", "health", "orders", "order", "details",
@@ -104,7 +106,17 @@ export function formatDisplayOrderId(order) {
 
 export async function handleInboundCommand(commandText, replyJid, senderId, safeSendMessage) {
   // Normalize "! command" -> "!command" and "/command" -> "!command"
-  const normalized = (commandText || "").trim().replace(/^([!/])\s+/, "$1").replace(/^\//, "!");
+  let normalized = (commandText || "").trim().replace(/^([!/])\s+/, "$1").replace(/^\//, "!");
+
+  // Ambient Voice-to-FSM Intent Parsing (Transcribed Whisper Voice Notes in English & Swahili)
+  if (!normalized.startsWith("!")) {
+    const voiceIntent = parseVoiceTranscription(normalized);
+    if (voiceIntent.success) {
+      console.log(`🎙️ [VOICE FSM INTENT] Speech: "${normalized}" -> Normalized: "${voiceIntent.normalizedCommand}"`);
+      normalized = voiceIntent.normalizedCommand;
+    }
+  }
+
   const parts = normalized.split(/\s+/);
   const command = parts[0].toLowerCase();
   const args = normalized.substring(parts[0].length).trim();
@@ -721,6 +733,13 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
         return;
       }
 
+      // Monotonic FSM Invariant: Strict Forward Propagation & Anti-Backwash
+      const fsmVerdict = evaluateFsmTransition(o, command, senderId);
+      if (!fsmVerdict.allowed) {
+        await safeSendMessage(replyJid, { text: fsmVerdict.message });
+        return;
+      }
+
       // Commit Order Guard hold if one exists for this order
       let ogCommit = await sharedOrderGuard.commitOrder(o.id);
       if (!ogCommit.success && ogCommit.code === "HOLD_NOT_FOUND" && o.notes) {
@@ -798,6 +817,13 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
       const o = await resolveShopOrder(shop.id, orderId);
       if (!o) {
         await safeSendMessage(replyJid, { text: `❌ Order \`${orderId}\` not found for ${shop.name}.` });
+        return;
+      }
+
+      // Monotonic FSM Invariant: Strict Forward Propagation & Anti-Backwash
+      const fsmVerdict = evaluateFsmTransition(o, command, senderId);
+      if (!fsmVerdict.allowed) {
+        await safeSendMessage(replyJid, { text: fsmVerdict.message });
         return;
       }
 
