@@ -2357,7 +2357,7 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
               `• Command: \`!tenant provision <slug> <tier1|tier2> <Name> <Phone>\`\n` +
               `• Example: \`!tenant provision afroboutique tier2 "Afro Boutique" +254712345678\`\n\n` +
               `_Tiers:_\n` +
-              `• *tier1*: Starter (KES 5,000 Setup [1st Month Free] • KES 3,500/mo ongoing)\n` +
+              `• *tier1*: Starter (KES 5,000 Setup • KES 3,500/mo)\n` +
               `• *tier2*: Branded Pro (KES 25,000 Setup • KES 4,500/mo + BYOD CNAME)`
       });
       return;
@@ -2397,7 +2397,7 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
         throw new Error(provData.error || `HTTP ${provRes.status}`);
       }
 
-      const setupFee = tier.toLowerCase() === "tier2" ? "25,000" : "5,000 (1st Month Included)";
+      const setupFee = tier.toLowerCase() === "tier2" ? "25,000" : "5,000";
       const monthlyFee = tier.toLowerCase() === "tier2" ? "4,500" : "3,500";
       const opsInvite = provData.whatsapp?.operations?.invite_url || "Channel provisioned internally";
 
@@ -2406,7 +2406,7 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
         `🏪 *TENANT PROFILE*\n` +
         `• Slug: \`${cleanSlug}\`\n` +
         `• Tier: *${tier.toUpperCase()} (${tier.toLowerCase() === "tier2" ? "Branded Pro" : "Starter"})*\n` +
-        `• Terms: *KES ${setupFee} • KES ${monthlyFee}/Month Ongoing*\n` +
+        `• Terms: *KES ${setupFee} Setup • KES ${monthlyFee}/Month*\n` +
         `• Contact: \`${cleanPhone}\`\n\n` +
         `🌐 *LIVE STORE ACCESS*\n` +
         `• Storefront: https://missperpetual.cloud/${cleanSlug}\n` +
