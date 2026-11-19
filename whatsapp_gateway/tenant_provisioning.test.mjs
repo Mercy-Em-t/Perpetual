@@ -64,9 +64,11 @@ test("Tenant Provisioning: DM passthrough blocks non-admin users from provisioni
   await handleInboundCommand("!tenant help", customerJid, customerJid, safeSendMessage);
 
   assert.ok(sent.length >= 1);
-  // Non-admin DM user gets the customer greeting, NOT the tenant provisioning console
-  assert.doesNotMatch(sent[0].content.text, /TENANT PROVISIONING USAGE/i);
-  assert.match(sent[0].content.text, /Reply with \*!help\* to view your available customer options/i);
+  // Non-admin DM user is strictly blocked by Default-Deny, NOT given the tenant provisioning console
+  const customerReply = sent.find(s => s.jid === customerJid);
+  assert.ok(customerReply, "Customer should receive response");
+  assert.doesNotMatch(customerReply.content.text, /TENANT PROVISIONING USAGE/i);
+  assert.match(customerReply.content.text, /Access Denied|Permission Denied|not authorized/i);
 });
 
 test("Tenant Provisioning: Regex extracts arguments accurately for various quoting styles", () => {

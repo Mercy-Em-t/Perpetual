@@ -41,6 +41,15 @@ import {
   generateMonthlyDocketReport
 } from "./operating_dockets.mjs";
 import { executeDatabaseBackup } from "./database_backup_sentinel.mjs";
+import {
+  evaluateAccess,
+  recordAuditLog,
+  getAuditLogs,
+  dispatchSecurityAlertIfNeeded,
+  SEVERITY,
+  AUDIT_DECISION
+} from "./security_access_sentinel.mjs";
+import { executeShopBroadcast } from "./broadcast_guardrails.mjs";
 
 export const KNOWN_COMMANDS = [
   "help", "status", "health", "orders", "order", "details",
@@ -55,7 +64,8 @@ export const KNOWN_COMMANDS = [
   "ticket", "tickets", "claim", "resolve", "sentinel",
   "voucher", "vouchers", "refund",
   "infractions", "infraction", "suspend", "reinstate",
-  "docket", "dockets", "backup", "tenant", "provision"
+  "docket", "dockets", "backup", "tenant", "provision",
+  "audit", "broadcast"
 ];
 
 const dbHdrs = {
@@ -103,6 +113,81 @@ export async function handleInboundCommand(commandText, replyJid, senderId, safe
   try {
     // 1. Resolve Multi-Tenant Context
     const context = await resolveGroupContext(replyJid);
+
+    // 1.1 Strict Zero-Trust (Default Deny) Two-Factor Access Check
+    // Verifies: (1) Community Lineage (rejects orphan/standalone groups)
+    //           (2) Sender Phone Identity & Role Authorization
+    //           (3) Channel Appropriateness (ensures command was dispatched in the proper channel)
+    const isCommand = normalized.startsWith("!") || KNOWN_COMMANDS.includes(command.replace(/^!/, ""));
+    if (isCommand) {
+      const accessVerdict = evaluateAccess({
+        command,
+        senderPhone: senderId,
+        replyJid,
+        context,
+        shop: context?.shop
+      });
+
+      if (!accessVerdict.permitted) {
+        const auditEntry = recordAuditLog({
+          actorPhone: senderId,
+          actorRole: accessVerdict.role,
+          channelJid: replyJid,
+          channelType: accessVerdict.channelType,
+          command: normalized,
+          tenantSlug: context?.shop?.slug || "platform",
+          decision: accessVerdict.decision,
+          severity: accessVerdict.severity,
+          reason: accessVerdict.reason
+        });
+
+        // Trigger throttled security incident alert to Admin DM if HIGH or CRITICAL
+        await dispatchSecurityAlertIfNeeded({
+          auditEntry,
+          safeSendMessage
+        });
+
+        // Bounce request immediately - DO NOT EXECUTE
+        if (accessVerdict.decision === AUDIT_DECISION.DENIED_ORPHAN_GROUP) {
+          await safeSendMessage(replyJid, {
+            text: `🔒 *Channel Unverified:* This WhatsApp group is an unverified standalone group not linked to the Perpetua Community hierarchy. Operations are restricted.`
+          });
+          return;
+        }
+
+        if (accessVerdict.decision === AUDIT_DECISION.DENIED_WRONG_CHANNEL) {
+          await safeSendMessage(replyJid, {
+            text: `⚠️ *Wrong Channel:* ${accessVerdict.reason}`
+          });
+          return;
+        }
+
+        if (accessVerdict.decision === AUDIT_DECISION.DENIED_UNREGISTERED_SENDER) {
+          await safeSendMessage(replyJid, {
+            text: `🔒 *Access Denied:* Your phone number is not registered as an authorized operator for this channel. Contact Platform Administration.`
+          });
+          return;
+        }
+
+        await safeSendMessage(replyJid, {
+          text: `🔒 *Permission Denied:* Your registered role (\`${accessVerdict.role}\`) is not authorized to execute \`${command}\`.`
+        });
+        return;
+      }
+
+      // Log authorized execution to audit trail
+      recordAuditLog({
+        actorPhone: senderId,
+        actorRole: accessVerdict.role,
+        channelJid: replyJid,
+        channelType: accessVerdict.channelType,
+        command: normalized,
+        tenantSlug: context?.shop?.slug || "platform",
+        decision: AUDIT_DECISION.PERMITTED,
+        severity: SEVERITY.INFO,
+        reason: "Authorized command execution"
+      });
+    }
 
     // 2. Query Shop Directory (!shops [query], !stores [query])
     if (command === "!shops" || command === "!stores") {
@@ -1057,6 +1142,25 @@ async function handleShopCommand(command, args, replyJid, senderId, callerName, 
       return;
     }
     await safeSendMessage(replyJid, { text: auditRes.formattedWhatsAppMessage });
+    return;
+  }
+
+  // 14. Marketing & Community Announcement Broadcast: !broadcast <message>
+  if (command === "!broadcast") {
+    const broadcastRes = await executeShopBroadcast({
+      shop,
+      senderPhone: senderId,
+      content: args,
+      targetChannelType: "COMMUNITY",
+      safeSendMessage
+    });
+    if (!broadcastRes.success) {
+      await safeSendMessage(replyJid, { text: `❌ *Broadcast Blocked:* ${broadcastRes.error}` });
+      return;
+    }
+    await safeSendMessage(replyJid, {
+      text: `✅ *Broadcast Dispatched:*\nPromotional message successfully sent to the ${shop.name} customer community group.`
+    });
     return;
   }
 
@@ -2411,6 +2515,32 @@ async function handleSystemCommand(command, args, replyJid, senderId, callerName
       await safeSendMessage(replyJid, { text: `❌ Database backup failed: ${err.message}` });
       return;
     }
+  }
+
+  // 10. Security Audit Trail & Forensics: !audit [limit] [severity]
+  if (command === "!audit") {
+    const parts = (args || "").trim().split(/\s+/);
+    const limit = parseInt(parts[0], 10) || 5;
+    const severityFilter = parts[1]?.toUpperCase() || null;
+    const logs = getAuditLogs({ limit, severity: severityFilter });
+
+    if (logs.length === 0) {
+      await safeSendMessage(replyJid, { text: `📋 *Security Audit Trail:* No matching audit records logged.` });
+      return;
+    }
+
+    let report = `📋 *Security Audit Trail (${logs.length} Recent Records)*\n-----------------------------------------\n\n`;
+    logs.forEach((l, idx) => {
+      const badge = l.severity === "CRITICAL" ? "🚨" : l.severity === "HIGH" ? "🛡️" : l.severity === "MEDIUM" ? "⚠️" : "ℹ️";
+      report += `${badge} *[${l.severity}]* \`${l.id}\` — ${l.timestamp_eat}\n`;
+      report += `• Actor: \`${l.actor_phone}\` (${l.actor_role})\n`;
+      report += `• Cmd: \`${l.command}\` | Decision: \`${l.decision}\`\n`;
+      if (l.reason) report += `• Note: ${l.reason}\n`;
+      report += `\n`;
+    });
+
+    await safeSendMessage(replyJid, { text: report });
+    return;
   }
 
   // Unknown
